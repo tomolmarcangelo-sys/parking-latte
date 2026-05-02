@@ -104,7 +104,7 @@ async function startServer() {
     let dbStatus = 'disconnected';
     let dbError = null;
     try {
-      const { prisma } = await import('./server/db.js');
+      const { prisma } = await import('./db.js');
       await prisma.$queryRaw`SELECT 1`;
       dbStatus = 'connected';
     } catch (e: any) {
@@ -131,11 +131,11 @@ async function startServer() {
   });
 
   // Dynamically import routes to avoid circular dependencies if they use prisma
-  const { authRouter } = await import('./server/routes/auth.js');
-  const { menuRouter } = await import('./server/routes/menu.js');
-  const { orderRouter } = await import('./server/routes/orders.js');
-  const { inventoryRouter } = await import('./server/routes/inventory.js');
-  const { adminRouter } = await import('./server/routes/admin.js');
+  const { authRouter } = await import('./routes/auth.js');
+  const { menuRouter } = await import('./routes/menu.js');
+  const { orderRouter } = await import('./routes/orders.js');
+  const { inventoryRouter } = await import('./routes/inventory.js');
+  const { adminRouter } = await import('./routes/admin.js');
 
   app.use('/api/auth', authRouter);
   app.use('/api/menu', menuRouter);
