@@ -370,34 +370,37 @@ const Home: React.FC = () => {
         </header>
 
         {/* Search and Filters */}
-        <div className="sticky top-20 z-40 space-y-6 pb-6 bg-bg-base/90 backdrop-blur-xl -mx-4 px-4 pt-4 border-b border-border-subtle/30 shadow-sm">
-          <div className="max-w-2xl mx-auto relative group">
-            <input 
-              type="text" 
-              placeholder="Find your favorite drink..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white dark:bg-bg-sidebar border border-border-subtle p-6 pr-16 rounded-[32px] outline-none focus:border-brand-primary transition-all font-medium text-brand-primary shadow-sm group-hover:shadow-lg focus:shadow-xl"
-            />
-            <div className="absolute right-6 top-1/2 -translate-y-1/2 p-2 bg-brand-primary/5 text-brand-primary rounded-xl">
-              {searchQuery ? <X size={20} className="cursor-pointer" onClick={() => setSearchQuery('')} /> : <Zap size={20} />}
+        <div className="sticky top-20 z-40 bg-bg-base/90 backdrop-blur-xl -mx-4 px-4 py-4 md:py-6 border-b border-border-subtle/30 shadow-sm transition-all duration-300">
+          <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
+            <div className="max-w-2xl mx-auto relative group">
+              <input 
+                type="text" 
+                placeholder="Find your favorite drink..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white dark:bg-bg-sidebar border border-border-subtle p-4 md:p-6 pr-14 md:pr-16 rounded-2xl md:rounded-[32px] outline-none focus:border-brand-primary transition-all font-medium text-brand-primary shadow-sm group-hover:shadow-lg focus:shadow-xl text-sm md:text-base"
+              />
+              <div className="absolute right-4 md:right-6 top-1/2 -translate-y-1/2 p-1.5 md:p-2 bg-brand-primary/5 text-brand-primary rounded-xl">
+                {searchQuery ? <X size={18} className="cursor-pointer" onClick={() => setSearchQuery('')} /> : <Zap size={18} />}
+              </div>
             </div>
-          </div>
-          <div className="flex flex-wrap justify-center gap-3">
-            {filters.map(f => (
-              <button
-                key={f.name}
-                onClick={() => setActiveFilter(f.name)}
-                className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-2 ${
-                  activeFilter === f.name 
-                  ? 'bg-brand-primary border-brand-primary text-white shadow-xl shadow-brand-primary/20' 
-                  : 'bg-white dark:bg-bg-sidebar border-border-subtle text-text-muted hover:border-brand-secondary hover:text-brand-secondary'
-                }`}
-              >
-                {f.icon}
-                {f.name}
-              </button>
-            ))}
+
+            <div className="flex overflow-x-auto whitespace-nowrap gap-2 md:gap-3 pb-2 md:pb-0 no-scrollbar justify-start md:justify-center px-2">
+              {filters.map(f => (
+                <button
+                  key={f.name}
+                  onClick={() => setActiveFilter(f.name)}
+                  className={`px-5 md:px-8 py-2 md:py-3 rounded-full md:rounded-2xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-1.5 md:gap-2 flex-shrink-0 ${
+                    activeFilter === f.name 
+                    ? 'bg-brand-primary border-brand-primary text-white shadow-xl shadow-brand-primary/20' 
+                    : 'bg-white dark:bg-bg-sidebar border-border-subtle text-text-muted hover:border-brand-secondary hover:text-brand-secondary'
+                  }`}
+                >
+                  <span className="scale-90 md:scale-100">{f.icon}</span>
+                  {f.name}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
