@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Coffee, ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Coffee, ArrowRight, Eye, EyeOff, Loader2, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../lib/api';
 import { motion } from 'motion/react';
 import { GoogleLogin } from '@react-oauth/google';
+import AuthNavbar from '../components/navigation/AuthNavbar';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -58,7 +59,9 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-bg-base relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-bg-base relative overflow-hidden pt-24 md:pt-20">
+      <AuthNavbar />
+      
       {/* Background Orbs */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-brand-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
       <div className="absolute bottom-0 left-0 w-96 h-96 bg-brand-secondary/5 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
@@ -69,10 +72,12 @@ const Login: React.FC = () => {
         className="max-w-md w-full bg-white dark:bg-bg-sidebar rounded-[3rem] p-8 md:p-12 coffee-shadow border border-border-subtle relative z-10"
       >
         <div className="text-center mb-10">
-          <div className="inline-block p-5 bg-brand-primary/5 rounded-[24px] mb-6 shadow-inner text-brand-primary">
+          <Link to="/" className="inline-block p-5 bg-brand-primary/5 rounded-[24px] mb-6 shadow-inner text-brand-primary transition-transform hover:scale-105">
             <Coffee size={40} strokeWidth={1.5} />
-          </div>
-          <h1 className="text-4xl font-serif font-bold tracking-tight text-brand-primary mb-2">Parking Latte</h1>
+          </Link>
+          <Link to="/">
+            <h1 className="text-4xl font-serif font-bold tracking-tight text-brand-primary mb-2 hover:opacity-80 transition-opacity">Parking Latte</h1>
+          </Link>
           <p className="text-text-muted text-sm italic font-medium">Brewing your digital experience.</p>
         </div>
 
@@ -159,6 +164,16 @@ const Login: React.FC = () => {
           Don't have an account? {' '}
           <Link to="/register" className="text-brand-primary font-bold hover:text-brand-secondary transition-colors">Create Account</Link>
         </p>
+
+        <div className="mt-6 flex justify-center">
+          <Link 
+            to="/" 
+            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-text-muted hover:text-brand-primary transition-all group"
+          >
+            <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
+            Back to Home
+          </Link>
+        </div>
       </motion.div>
     </div>
   );
