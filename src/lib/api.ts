@@ -14,54 +14,107 @@ const handleResponse = async (res: Response) => {
 };
 
 export const apiClient = {
-  get: (url: string) => {
+  get: async (url: string) => {
     const token = localStorage.getItem('token');
-    return fetch(`${BASE_URL}${url}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    }).then(handleResponse);
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    try {
+      const res = await fetch(`${BASE_URL}${url}`, { headers });
+      return handleResponse(res);
+    } catch (err) {
+      console.error(`apiClient.get error for ${url}:`, err);
+      throw err;
+    }
   },
-  post: (url: string, data: any) => {
+  post: async (url: string, data: any) => {
     const token = localStorage.getItem('token');
-    return fetch(`${BASE_URL}${url}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify(data),
-    }).then(handleResponse);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    try {
+      const res = await fetch(`${BASE_URL}${url}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(data),
+      });
+      return handleResponse(res);
+    } catch (err) {
+      console.error(`apiClient.post error for ${url}:`, err);
+      throw err;
+    }
   },
-  patch: (url: string, data: any) => {
+  patch: async (url: string, data: any) => {
     const token = localStorage.getItem('token');
-    return fetch(`${BASE_URL}${url}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify(data),
-    }).then(handleResponse);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    try {
+      const res = await fetch(`${BASE_URL}${url}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify(data),
+      });
+      return handleResponse(res);
+    } catch (err) {
+      console.error(`apiClient.patch error for ${url}:`, err);
+      throw err;
+    }
   },
-  put: (url: string, data: any) => {
+  put: async (url: string, data: any) => {
     const token = localStorage.getItem('token');
-    return fetch(`${BASE_URL}${url}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify(data),
-    }).then(handleResponse);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    try {
+      const res = await fetch(`${BASE_URL}${url}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(data),
+      });
+      return handleResponse(res);
+    } catch (err) {
+      console.error(`apiClient.put error for ${url}:`, err);
+      throw err;
+    }
   },
-  delete: (url: string) => {
+  delete: async (url: string) => {
     const token = localStorage.getItem('token');
-    return fetch(`${BASE_URL}${url}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    }).then(handleResponse);
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    try {
+      const res = await fetch(`${BASE_URL}${url}`, {
+        method: 'DELETE',
+        headers,
+      });
+      return handleResponse(res);
+    } catch (err) {
+      console.error(`apiClient.delete error for ${url}:`, err);
+      throw err;
+    }
   }
 };

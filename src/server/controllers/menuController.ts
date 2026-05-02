@@ -3,6 +3,7 @@ import { prisma } from '../db.js';
 import { createAuditLog, AuditAction } from '../utils/audit.js';
 
 export const getMenu = async (req: Request, res: Response) => {
+  console.log('GET /api/menu requested');
   try {
     const categories = await prisma.category.findMany({
       include: {
@@ -23,21 +24,29 @@ export const getMenu = async (req: Request, res: Response) => {
     });
 
     const flattenedCategories = categories.map((cat) => ({
-      ...cat,
+      id: cat.id,
+      name: cat.name,
       products: cat.products.map((prod) => ({
-        ...prod,
-        // Calculate frontend price (Decimal to number)
+        id: prod.id,
+        name: prod.name,
+        description: prod.description,
         price: Number(prod.price),
+        imageUrl: prod.imageUrl,
+        categoryId: prod.categoryId,
         customizationGroups: prod.customizations.map((c) => ({
-          ...c.group,
-          choices: c.group.choices.map(choice => ({
-            ...choice,
+          id: c.group.id,
+          name: c.group.name,
+          required: c.group.required,
+          choices: (c.group.choices || []).map(choice => ({
+            id: choice.id,
+            name: choice.name,
             priceModifier: Number(choice.priceModifier)
           }))
         }))
       })),
     }));
 
+    console.log(`Successfully fetched ${flattenedCategories.length} categories`);
     res.json(flattenedCategories);
   } catch (error) {
     console.error('getMenu error:', error);
