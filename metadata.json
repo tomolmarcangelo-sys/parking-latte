@@ -1,0 +1,14 @@
+{
+  "name": "Parking Latte",
+  "description": "A premium, minimalist coffee ordering system with real-time tracking, inventory management, and role-based dashboards for customers, baristas, and admins.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "AI-powered order suggestions",
+    "Real-time inventory sync",
+    "Sales analytics dashboard"
+  ]
+}

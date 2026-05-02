@@ -1,0 +1,68 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", ui-serif, Georgia, serif;
+  
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-secondary: var(--brand-secondary);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-danger: var(--brand-danger);
+  
+  --color-bg-base: var(--bg-base);
+  --color-bg-sidebar: var(--bg-sidebar);
+  --color-border-subtle: var(--border-subtle);
+  --color-text-main: var(--text-main);
+  --color-text-muted: var(--text-muted);
+}
+
+:root {
+  --shadow-color: rgba(74, 55, 40, 0.05);
+  --brand-primary: #4A3728;
+  --brand-secondary: #C8A97E;
+  --brand-accent: #7D9061;
+  --brand-danger: #C2410C;
+  
+  --bg-base: #FDFBF7;
+  --bg-sidebar: #F7F1E9;
+  --border-subtle: #E8DFD3;
+  --text-main: #3E2F24;
+  --text-muted: #8A7A6E;
+}
+
+.dark {
+  --shadow-color: rgba(0, 0, 0, 0.6);
+  --brand-primary: #C8A27A;
+  --brand-secondary: #A67B5B;
+  --brand-accent: #7A8F6A;
+  --brand-danger: #D97A7A;
+
+  --bg-base: #1A1410;
+  --bg-sidebar: #2A1F1A;
+  --border-subtle: #3A2E28;
+  --text-main: #F5F5F5;
+  --text-muted: #CFCFCF;
+}
+
+@layer base {
+  body {
+    @apply bg-bg-base text-text-main font-sans antialiased transition-colors duration-300;
+  }
+  
+  h1, h2, h3, .font-serif {
+    @apply font-serif;
+  }
+}
+
+.glass {
+  @apply bg-bg-base/60 backdrop-blur-md border border-border-subtle;
+}
+
+.coffee-shadow {
+  box-shadow: 0 10px 30px -5px var(--shadow-color);
+}
+
+.rounded-32 {
+  border-radius: 32px;
+}

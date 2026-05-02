@@ -1,0 +1,136 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  STAFF
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PREPARING
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id                String   @id @default(uuid())
+  email             String   @unique
+  password          String?
+  name              String?
+  googleId          String?  @unique
+  emailVerified     Boolean  @default(false)
+  verificationToken String?  @unique
+  role              Role     @default(CUSTOMER)
+  orders            Order[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Category {
+  id       String    @id @default(uuid())
+  name     String    @unique
+  products Product[]
+}
+
+model Product {
+  id              String                 @id @default(uuid())
+  name            String
+  description     String?
+  price           Decimal                @db.Decimal(10, 2)
+  imageUrl        String?
+  category        Category               @relation(fields: [categoryId], references: [id])
+  categoryId      String
+  ingredients     ProductIngredient[]
+  customizations  ProductCustomization[]
+  orderItems      OrderItem[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+}
+
+model CustomizationGroup {
+  id       String                 @id @default(uuid())
+  name     String // e.g., "Milk Type", "Size"
+  required Boolean                @default(false)
+  choices  CustomizationChoice[]
+  products ProductCustomization[]
+}
+
+model ProductCustomization {
+  productId String
+  groupId   String
+  product   Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  group     CustomizationGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([productId, groupId])
+}
+
+model CustomizationChoice {
+  id            String             @id @default(uuid())
+  name          String // e.g., "Oat Milk", "Large"
+  priceModifier Decimal            @db.Decimal(10, 2) @default(0)
+  groupId       String
+  group         CustomizationGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+}
+
+model InventoryItem {
+  id                String              @id @default(uuid())
+  name              String              @unique
+  unit              String // e.g., 'ml', 'g', 'unit'
+  stockLevel        Float               @default(0)
+  lowStockThreshold Float               @default(10)
+  products          ProductIngredient[]
+  updatedAt         DateTime            @updatedAt
+}
+
+model ProductIngredient {
+  id              String        @id @default(uuid())
+  product         Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId       String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  inventoryItemId String
+  quantityNeeded  Float // How much of the inventory item is needed for 1 portion/unit of this product
+}
+
+model Order {
+  id          String      @id @default(uuid())
+  user        User        @relation(fields: [userId], references: [id])
+  userId      String
+  status      OrderStatus @default(PENDING)
+  totalAmount Decimal     @db.Decimal(10, 2)
+  items       OrderItem[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model OrderItem {
+  id            String  @id @default(uuid())
+  order         Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId       String
+  product       Product @relation(fields: [productId], references: [id])
+  productId     String
+  quantity      Int
+  customization Json? // e.g., { milk: 'Oat', sugar: 'Less' }
+  priceAtOrder  Decimal @db.Decimal(10, 2)
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  action      String   // e.g., "ROLE_CHANGE"
+  adminId     String
+  adminName   String?
+  targetId    String
+  targetName  String?
+  details     Json     // e.g., { oldRole: 'CUSTOMER', newRole: 'STAFF' }
+  createdAt   DateTime @default(now())
+}
