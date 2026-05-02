@@ -51,18 +51,21 @@ export const register = async (req: Request, res: Response) => {
 
     const rawToken = crypto.randomBytes(32).toString('hex');
     const verificationToken = hashToken(rawToken);
-    const verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    const verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
     const hashedPassword = await bcrypt.hash(password, 10);
+
+    const userCount = await prisma.user.count();
+    const role = userCount === 0 ? 'ADMIN' : 'CUSTOMER';
 
     await prisma.user.create({
       data: {
         email,
         password: hashedPassword,
         name,
-        role: 'CUSTOMER',
+        role,
         emailVerified: false,
-        verificationToken,
-        verificationTokenExpiry,
+        verificationTokenHash: verificationToken,
+        verificationTokenExpires,
       },
     });
 
@@ -95,13 +98,13 @@ export const resendVerification = async (req: Request, res: Response) => {
 
     const rawToken = crypto.randomBytes(32).toString('hex');
     const verificationToken = hashToken(rawToken);
-    const verificationTokenExpiry = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 hour for resends
+    const verificationTokenExpires = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 hour for resends
 
     await prisma.user.update({
       where: { id: user.id },
       data: {
-        verificationToken,
-        verificationTokenExpiry,
+        verificationTokenHash: verificationToken,
+        verificationTokenExpires,
       },
     });
 
@@ -122,14 +125,14 @@ export const verifyEmail = async (req: Request, res: Response) => {
   try {
     const hashedToken = hashToken(token as string);
     const user = await prisma.user.findUnique({
-      where: { verificationToken: hashedToken },
+      where: { verificationTokenHash: hashedToken },
     });
 
     if (!user) {
       return res.status(400).json({ message: 'Invalid or expired verification link' });
     }
 
-    if (user.verificationTokenExpiry && user.verificationTokenExpiry < new Date()) {
+    if (user.verificationTokenExpires && user.verificationTokenExpires < new Date()) {
       return res.status(400).json({ message: 'Verification link has expired. Please request a new one.' });
     }
 
@@ -137,8 +140,8 @@ export const verifyEmail = async (req: Request, res: Response) => {
       where: { id: user.id },
       data: {
         emailVerified: true,
-        verificationToken: null,
-        verificationTokenExpiry: null,
+        verificationTokenHash: null,
+        verificationTokenExpires: null,
       },
     });
 
@@ -206,13 +209,16 @@ export const googleLogin = async (req: Request, res: Response) => {
       }
     } else {
       // Create new user
+      const userCount = await prisma.user.count();
+      const role = userCount === 0 ? 'ADMIN' : 'CUSTOMER';
+
       user = await prisma.user.create({
         data: {
           email,
           name,
           googleId,
           emailVerified: true,
-          role: 'CUSTOMER',
+          role,
         },
       });
     }
