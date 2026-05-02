@@ -49,8 +49,25 @@ async function startServer() {
 
   const PORT = process.env.PORT || 3000;
 
+  const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'https://ais-dev-pzn2t2wtipqows663l4ot6-426097546045.asia-southeast1.run.app' // Current dev URL
+  ].filter(Boolean) as string[];
+
   app.use(cors({
-    origin: true,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+        callback(null, true);
+      } else {
+        // In production, you might want to be stricter, but origin: true is a good fallback
+        callback(null, true); 
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
@@ -85,17 +102,22 @@ async function startServer() {
   // API Routes
   app.get('/api/health', async (req, res) => {
     let dbStatus = 'disconnected';
+    let dbError = null;
     try {
-      const { prisma } = await import('./src/server/db.ts');
+      const { prisma } = await import('./server/db.js');
       await prisma.$queryRaw`SELECT 1`;
       dbStatus = 'connected';
-    } catch (e) {
+    } catch (e: any) {
       dbStatus = 'error';
+      dbError = process.env.NODE_ENV === 'development' ? e.message : 'Database connection failed';
+      console.error('Health check DB error:', e);
     }
     res.json({ 
       status: 'ok', 
       database: dbStatus,
-      timestamp: new Date().toISOString() 
+      error: dbError,
+      timestamp: new Date().toISOString(),
+      env: process.env.NODE_ENV
     });
   });
 
@@ -109,11 +131,11 @@ async function startServer() {
   });
 
   // Dynamically import routes to avoid circular dependencies if they use prisma
-  const { authRouter } = await import('./src/server/routes/auth.ts');
-  const { menuRouter } = await import('./src/server/routes/menu.ts');
-  const { orderRouter } = await import('./src/server/routes/orders.ts');
-  const { inventoryRouter } = await import('./src/server/routes/inventory.ts');
-  const { adminRouter } = await import('./src/server/routes/admin.ts');
+  const { authRouter } = await import('./server/routes/auth.js');
+  const { menuRouter } = await import('./server/routes/menu.js');
+  const { orderRouter } = await import('./server/routes/orders.js');
+  const { inventoryRouter } = await import('./server/routes/inventory.js');
+  const { adminRouter } = await import('./server/routes/admin.js');
 
   app.use('/api/auth', authRouter);
   app.use('/api/menu', menuRouter);
