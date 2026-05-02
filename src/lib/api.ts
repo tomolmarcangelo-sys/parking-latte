@@ -1,5 +1,18 @@
 const BASE_URL = '/api';
 
+const handleResponse = async (res: Response) => {
+  const data = await res.json();
+  if (!res.ok) {
+    const error = new Error(data.message || 'API request failed');
+    (error as any).response = {
+      status: res.status,
+      data: data
+    };
+    throw error;
+  }
+  return data;
+};
+
 export const apiClient = {
   get: (url: string) => {
     const token = localStorage.getItem('token');
@@ -7,7 +20,7 @@ export const apiClient = {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
-    }).then(res => res.json());
+    }).then(handleResponse);
   },
   post: (url: string, data: any) => {
     const token = localStorage.getItem('token');
@@ -18,7 +31,7 @@ export const apiClient = {
         'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify(data),
-    }).then(res => res.json());
+    }).then(handleResponse);
   },
   patch: (url: string, data: any) => {
     const token = localStorage.getItem('token');
@@ -29,7 +42,7 @@ export const apiClient = {
         'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify(data),
-    }).then(res => res.json());
+    }).then(handleResponse);
   },
   put: (url: string, data: any) => {
     const token = localStorage.getItem('token');
@@ -40,7 +53,7 @@ export const apiClient = {
         'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify(data),
-    }).then(res => res.json());
+    }).then(handleResponse);
   },
   delete: (url: string) => {
     const token = localStorage.getItem('token');
@@ -49,6 +62,6 @@ export const apiClient = {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
-    }).then(res => res.json());
+    }).then(handleResponse);
   }
 };

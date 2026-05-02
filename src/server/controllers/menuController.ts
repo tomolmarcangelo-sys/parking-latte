@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../db.js';
+import { createAuditLog, AuditAction } from '../utils/audit.js';
 
 export const getMenu = async (req: Request, res: Response) => {
   try {
@@ -59,12 +60,25 @@ export const getCategories = async (req: Request, res: Response) => {
   }
 };
 
+// I will only replace the parts that I need to edit to stay concise
 export const createCategory = async (req: Request, res: Response) => {
   const { name } = req.body;
+  const adminId = (req as any).user?.id;
   try {
     const category = await prisma.category.create({
       data: { name },
     });
+    
+    if (adminId) {
+      await createAuditLog({
+        action: AuditAction.CATEGORY_CREATE,
+        adminId,
+        targetId: category.id,
+        targetName: category.name,
+        details: { name },
+      });
+    }
+
     res.status(201).json(category);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
@@ -74,11 +88,24 @@ export const createCategory = async (req: Request, res: Response) => {
 export const updateCategory = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { name } = req.body;
+  const adminId = (req as any).user?.id;
   try {
+    const oldCategory = await prisma.category.findUnique({ where: { id } });
     const category = await prisma.category.update({
       where: { id },
       data: { name },
     });
+
+    if (adminId && oldCategory) {
+      await createAuditLog({
+        action: AuditAction.CATEGORY_UPDATE,
+        adminId,
+        targetId: id,
+        targetName: category.name,
+        details: { oldName: oldCategory.name, newName: name },
+      });
+    }
+
     res.json(category);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
@@ -87,7 +114,10 @@ export const updateCategory = async (req: Request, res: Response) => {
 
 export const deleteCategory = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const adminId = (req as any).user?.id;
   try {
+    const category = await prisma.category.findUnique({ where: { id } });
+    
     // Check if category has products
     const productCount = await prisma.product.count({
       where: { categoryId: id }
@@ -100,6 +130,17 @@ export const deleteCategory = async (req: Request, res: Response) => {
     }
 
     await prisma.category.delete({ where: { id } });
+
+    if (adminId && category) {
+      await createAuditLog({
+        action: AuditAction.CATEGORY_DELETE,
+        adminId,
+        targetId: id,
+        targetName: category.name,
+        details: { name: category.name },
+      });
+    }
+
     res.json({ message: 'Category deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
@@ -108,6 +149,7 @@ export const deleteCategory = async (req: Request, res: Response) => {
 
 export const createProduct = async (req: Request, res: Response) => {
   const { name, description, price, imageUrl, categoryId, ingredients } = req.body;
+  const adminId = (req as any).user?.id;
   try {
     const product = await prisma.product.create({
       data: {
@@ -124,6 +166,17 @@ export const createProduct = async (req: Request, res: Response) => {
         },
       },
     });
+
+    if (adminId) {
+      await createAuditLog({
+        action: AuditAction.PRODUCT_CREATE,
+        adminId,
+        targetId: product.id,
+        targetName: product.name,
+        details: { name, description, price, categoryId },
+      });
+    }
+
     res.status(201).json(product);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
@@ -133,11 +186,38 @@ export const createProduct = async (req: Request, res: Response) => {
 export const updateProduct = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, description, price, imageUrl, categoryId } = req.body;
+  const adminId = (req as any).user?.id;
   try {
+    const oldProduct = await prisma.product.findUnique({ where: { id } });
     const product = await prisma.product.update({
       where: { id },
       data: { name, description, price, imageUrl, categoryId },
     });
+
+    if (adminId && oldProduct) {
+      const details: any = {};
+      if (oldProduct.price.toString() !== price.toString()) {
+        details.oldPrice = oldProduct.price;
+        details.newPrice = price;
+        
+        await createAuditLog({
+          action: AuditAction.PRICE_UPDATE,
+          adminId,
+          targetId: id,
+          targetName: product.name,
+          details,
+        });
+      }
+
+      await createAuditLog({
+        action: AuditAction.PRODUCT_UPDATE,
+        adminId,
+        targetId: id,
+        targetName: product.name,
+        details: { name, categoryId },
+      });
+    }
+
     res.json(product);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
@@ -146,8 +226,21 @@ export const updateProduct = async (req: Request, res: Response) => {
 
 export const deleteProduct = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const adminId = (req as any).user?.id;
   try {
+    const product = await prisma.product.findUnique({ where: { id } });
     await prisma.product.delete({ where: { id } });
+
+    if (adminId && product) {
+      await createAuditLog({
+        action: AuditAction.PRODUCT_DELETE,
+        adminId,
+        targetId: id,
+        targetName: product.name,
+        details: { name: product.name },
+      });
+    }
+
     res.json({ message: 'Product deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });

@@ -218,14 +218,47 @@ const Home: React.FC = () => {
     menuRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const filters = [
-    { name: 'All', icon: <Zap size={14} /> },
-    { name: 'Coffee', icon: <Coffee size={14} /> },
-    { name: 'Non-Coffee', icon: <span className="text-sm">🍓</span> },
-    { name: 'Sweet', icon: <Star size={14} /> },
-    { name: 'Fruity', icon: <Zap size={14} /> },
-    { name: 'Chocolatey', icon: <Cookie size={14} /> }
-  ];
+  const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const dynamicFilters = React.useMemo(() => {
+    const baseFilters = [
+      { name: 'All', icon: <Zap size={14} /> }
+    ];
+
+    // Extract unique categories from fetched data
+    const categoryFilters = categories.map(cat => {
+      const norm = normalize(cat.name);
+      let icon = <Coffee size={14} />;
+      if (norm.includes('non')) icon = <span className="text-sm">🍓</span>;
+      else if (norm.includes('milk')) icon = <span className="text-sm">🥛</span>;
+      else if (norm.includes('juice') || norm.includes('fruit')) icon = <span className="text-sm">🍹</span>;
+      else if (norm.includes('tea')) icon = <span className="text-sm">🍃</span>;
+      else if (norm.includes('dessert') || norm.includes('cake') || norm.includes('pastr')) icon = <Cookie size={14} />;
+      
+      return { name: cat.name, icon };
+    });
+
+    // Add extra behavioral tags
+    const extraTags = [
+      { name: 'Sweet', icon: <Star size={14} /> },
+      { name: 'Fruity', icon: <Zap size={14} /> },
+      { name: 'Chocolatey', icon: <Cookie size={14} /> }
+    ];
+
+    // Filter out duplicates if category names overlap with hardcoded ones
+    const seen = new Set(['all']);
+    const result = [...baseFilters];
+
+    [...categoryFilters, ...extraTags].forEach(f => {
+      const norm = normalize(f.name);
+      if (!seen.has(norm)) {
+        seen.add(norm);
+        result.push(f);
+      }
+    });
+
+    return result;
+  }, [categories]);
 
   const filteredCategories = categories.map(cat => ({
     ...cat,
@@ -236,21 +269,32 @@ const Home: React.FC = () => {
       const productName = p.name.toLowerCase();
       const productDesc = (p.description || '').toLowerCase();
 
-      // Normalize check for Non-Coffee
-      const isNonCoffee = categoryName.includes('non') || categoryName.includes('milk') || categoryName.includes('juice');
-      const isCoffee = !isNonCoffee && (categoryName.includes('coffee') || productName.includes('espresso'));
+      // Normalized names for precise matching
+      const normActiveFilter = normalize(activeFilter);
+      const normCategoryName = normalize(cat.name);
 
       let matchesFilter = true;
-      if (activeFilter === 'Coffee') {
-        matchesFilter = isCoffee;
+      if (activeFilter === 'All') {
+        matchesFilter = true;
+      } else if (normActiveFilter === normCategoryName) {
+        // Precise category match
+        matchesFilter = true;
+      } else if (activeFilter === 'Coffee') {
+        // Primary 'Coffee' filter logic - more inclusive matching
+        const isNonCoffee = normCategoryName.includes('non') || categoryName.includes('milk') || categoryName.includes('juice');
+        matchesFilter = !isNonCoffee && (categoryName.includes('coffee') || categoryName.includes('brew') || categoryName.includes('espresso') || productName.includes('espresso') || productName.includes('latte'));
       } else if (activeFilter === 'Non-Coffee') {
-        matchesFilter = isNonCoffee;
+        // Primary 'Non-Coffee' filter logic - more inclusive matching
+        matchesFilter = normCategoryName.includes('non') || categoryName.includes('milk') || categoryName.includes('juice') || categoryName.includes('tea') || categoryName.includes('soda') || categoryName.includes('refresher');
       } else if (activeFilter === 'Sweet') {
         matchesFilter = productDesc.includes('sweet') || productDesc.includes('caramel') || productName.includes('caramel');
       } else if (activeFilter === 'Fruity') {
         matchesFilter = productDesc.includes('berry') || productDesc.includes('mango') || productDesc.includes('strawberry') || productName.includes('strawberry') || productName.includes('mango');
       } else if (activeFilter === 'Chocolatey') {
         matchesFilter = productDesc.includes('choco') || productDesc.includes('oreo') || productName.includes('choco') || productName.includes('oreo');
+      } else {
+        // Fallback precise match
+        matchesFilter = normCategoryName === normActiveFilter;
       }
       
       return matchesSearch && matchesFilter;
@@ -386,7 +430,7 @@ const Home: React.FC = () => {
             </div>
 
             <div className="flex overflow-x-auto whitespace-nowrap gap-2 md:gap-3 pb-2 md:pb-0 no-scrollbar justify-start md:justify-center px-2">
-              {filters.map(f => (
+              {dynamicFilters.map(f => (
                 <button
                   key={f.name}
                   onClick={() => setActiveFilter(f.name)}

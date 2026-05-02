@@ -12,9 +12,12 @@ const transporter = nodemailer.createTransport({
 export const sendVerificationEmail = async (email: string, token: string) => {
   const appUrl = process.env.APP_URL || 'http://localhost:3000';
   const verificationUrl = `${appUrl}/verify-email?token=${token}`;
+  
+  // Use SMTP_FROM or fallback to SMTP_USER for sender identity consistency
+  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@parkinglatte.com';
 
   const mailOptions = {
-    from: '"Parking Latte" <no-reply@parkinglatte.com>',
+    from: `"Parking Latte" <${fromEmail}>`,
     to: email,
     subject: '☕ Verify Your Parking Latte Account',
     html: `

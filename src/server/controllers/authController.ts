@@ -35,6 +35,7 @@ export const register = async (req: Request, res: Response) => {
     if (existingUser) return res.status(400).json({ message: 'User already exists' });
 
     const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
@@ -45,6 +46,7 @@ export const register = async (req: Request, res: Response) => {
         role: 'CUSTOMER',
         emailVerified: false,
         verificationToken,
+        verificationTokenExpiry,
       },
     });
 
@@ -54,9 +56,14 @@ export const register = async (req: Request, res: Response) => {
       message: 'Registration successful. Please check your email to verify your account.',
       requiresVerification: true 
     });
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ message: 'Server error' });
+  } catch (error: any) {
+    console.error('Registration error details:', {
+      message: error.message,
+      code: error.code,
+      meta: error.meta,
+      stack: error.stack
+    });
+    res.status(500).json({ message: `Registration failed: ${error.message || 'Server error'}` });
   }
 };
 
@@ -72,6 +79,10 @@ export const verifyEmail = async (req: Request, res: Response) => {
 
     if (!user) {
       return res.status(400).json({ message: 'Invalid or expired verification token' });
+    }
+
+    if (user.verificationTokenExpiry && user.verificationTokenExpiry < new Date()) {
+      return res.status(400).json({ message: 'Verification token has expired' });
     }
 
     await prisma.user.update({

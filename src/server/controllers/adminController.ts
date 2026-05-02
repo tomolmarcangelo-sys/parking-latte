@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../db.js';
+import { createAuditLog, AuditAction } from '../utils/audit.js';
 
 export const getDashboardStats = async (req: Request, res: Response) => {
   try {
@@ -63,10 +64,7 @@ export const updateUserRole = async (req: Request, res: Response) => {
   const adminId = (req as any).user.id;
 
   try {
-    const [oldUser, adminUser] = await Promise.all([
-      prisma.user.findUnique({ where: { id: userId } }),
-      prisma.user.findUnique({ where: { id: adminId } }),
-    ]);
+    const oldUser = await prisma.user.findUnique({ where: { id: userId } });
 
     if (!oldUser) {
       return res.status(404).json({ message: 'User not found' });
@@ -83,18 +81,15 @@ export const updateUserRole = async (req: Request, res: Response) => {
       },
     });
 
-    // Create audit log
-    await prisma.auditLog.create({
-      data: {
-        action: 'ROLE_CHANGE',
-        adminId: adminId,
-        adminName: adminUser?.name || adminUser?.email,
-        targetId: userId,
-        targetName: user.name || user.email,
-        details: {
-          oldRole: oldUser.role,
-          newRole: role,
-        },
+    // Create audit log using utility
+    await createAuditLog({
+      action: AuditAction.ROLE_CHANGE,
+      adminId,
+      targetId: userId,
+      targetName: user.name || user.email,
+      details: {
+        oldRole: oldUser.role,
+        newRole: role,
       },
     });
 
@@ -119,6 +114,7 @@ export const getAuditLogs = async (req: Request, res: Response) => {
 
 export const createCustomizationGroup = async (req: Request, res: Response) => {
   const { name, required, productIds } = req.body;
+  const adminId = (req as any).user?.id;
   try {
     const group = await prisma.customizationGroup.create({
       data: {
@@ -130,6 +126,17 @@ export const createCustomizationGroup = async (req: Request, res: Response) => {
       },
       include: { choices: true, products: true },
     });
+
+    if (adminId) {
+      await createAuditLog({
+        action: AuditAction.CUSTOMIZATION_GROUP_CREATE,
+        adminId,
+        targetId: group.id,
+        targetName: group.name,
+        details: { required, productCount: productIds?.length || 0 },
+      });
+    }
+
     res.status(201).json(group);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
@@ -139,6 +146,7 @@ export const createCustomizationGroup = async (req: Request, res: Response) => {
 export const updateCustomizationGroup = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, required, productIds } = req.body;
+  const adminId = (req as any).user?.id;
   try {
     // Reset products and update
     await prisma.productCustomization.deleteMany({ where: { groupId: id } });
@@ -153,6 +161,17 @@ export const updateCustomizationGroup = async (req: Request, res: Response) => {
       },
       include: { choices: true, products: true },
     });
+
+    if (adminId) {
+      await createAuditLog({
+        action: AuditAction.CUSTOMIZATION_GROUP_CREATE, // Or define UPDATED action
+        adminId,
+        targetId: group.id,
+        targetName: group.name,
+        details: { required, productCount: productIds?.length || 0, isUpdate: true },
+      });
+    }
+
     res.json(group);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
@@ -161,8 +180,21 @@ export const updateCustomizationGroup = async (req: Request, res: Response) => {
 
 export const deleteCustomizationGroup = async (req: Request, res: Response) => {
   const { id } = req.params;
+  const adminId = (req as any).user?.id;
   try {
+    const group = await prisma.customizationGroup.findUnique({ where: { id } });
     await prisma.customizationGroup.delete({ where: { id } });
+
+    if (adminId && group) {
+      await createAuditLog({
+        action: AuditAction.CUSTOMIZATION_GROUP_DELETE,
+        adminId,
+        targetId: id,
+        targetName: group.name,
+        details: { groupName: group.name },
+      });
+    }
+
     res.status(204).end();
   } catch (error) {
     res.status(500).json({ message: 'Server error' });

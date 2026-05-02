@@ -148,7 +148,6 @@ const Login: React.FC = () => {
           <GoogleLogin
             onSuccess={handleGoogleSuccess}
             onError={() => setError('Google sign-in failed. Please try again.')}
-            useOneTap
             shape="pill"
             theme="outline"
             size="large"

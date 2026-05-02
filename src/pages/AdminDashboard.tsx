@@ -607,10 +607,29 @@ const AdminDashboard: React.FC = () => {
                       {log.targetName}
                     </td>
                     <td className="px-10 py-6">
-                      <div className="flex items-center gap-2 font-bold text-[10px] text-text-muted uppercase tracking-widest whitespace-nowrap">
-                        <span className="opacity-60">{log.details.oldRole}</span>
-                        <ArrowRight size={12} className="text-brand-secondary" />
-                        <span className="text-brand-primary">{log.details.newRole}</span>
+                      <div className="font-bold text-[10px] text-text-muted uppercase tracking-widest whitespace-nowrap">
+                        {log.action === 'ROLE_CHANGE' ? (
+                          <div className="flex items-center gap-2">
+                             <span className="opacity-60">{log.details.oldRole}</span>
+                             <ArrowRight size={12} className="text-brand-secondary" />
+                             <span className="text-brand-primary">{log.details.newRole}</span>
+                          </div>
+                        ) : log.action === 'STOCK_UPDATE' ? (
+                          <div className="flex items-center gap-2">
+                             <span className="opacity-60">{log.details.oldLevel}</span>
+                             <ArrowRight size={12} className="text-brand-secondary" />
+                             <span className="text-brand-primary">{log.details.newLevel}</span>
+                             <span className="ml-1 opacity-40 lowercase">({inventory.find(i => i.id === log.targetId)?.unit})</span>
+                          </div>
+                        ) : log.action === 'PRICE_UPDATE' ? (
+                          <div className="flex items-center gap-2">
+                             <span className="opacity-60">₱{log.details.oldPrice}</span>
+                             <ArrowRight size={12} className="text-brand-secondary" />
+                             <span className="text-brand-primary">₱{log.details.newPrice}</span>
+                          </div>
+                        ) : (
+                          <span className="opacity-60 italic">Administrative Action Recorded</span>
+                        )}
                       </div>
                     </td>
                   </motion.tr>

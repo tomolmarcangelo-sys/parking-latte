@@ -31,6 +31,7 @@ model User {
   googleId          String?  @unique
   emailVerified     Boolean  @default(false)
   verificationToken String?  @unique
+  verificationTokenExpiry DateTime?
   role              Role     @default(CUSTOMER)
   orders            Order[]
   createdAt         DateTime @default(now())
