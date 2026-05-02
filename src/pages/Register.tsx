@@ -65,6 +65,22 @@ const Register: React.FC = () => {
     }
   };
 
+  const [resending, setResending] = useState(false);
+  const [resendStatus, setResendStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+  const handleResendVerification = async () => {
+    setResending(true);
+    setResendStatus('idle');
+    try {
+      await apiClient.post('/auth/resend-verification', { email });
+      setResendStatus('success');
+    } catch (err) {
+      setResendStatus('error');
+    } finally {
+      setResending(false);
+    }
+  };
+
   if (success) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-bg-base relative overflow-hidden pt-24 md:pt-20">
@@ -82,10 +98,27 @@ const Register: React.FC = () => {
             <CheckCircle2 size={40} strokeWidth={1.5} />
           </div>
           <h1 className="text-3xl font-serif font-bold text-brand-primary mb-4">Check Your Email</h1>
-          <p className="text-text-muted mb-8 leading-relaxed">
+          <p className="text-text-muted mb-6 leading-relaxed">
             We've sent a verification link to <span className="font-bold text-brand-primary">{email}</span>. 
             Please verify your account to start ordering.
           </p>
+          
+          <div className="mb-8">
+            <button 
+              onClick={handleResendVerification}
+              disabled={resending}
+              className="text-xs font-bold text-brand-primary hover:text-brand-secondary transition-colors disabled:opacity-50"
+            >
+              {resending ? 'Sending...' : "Didn't get the email? Click here to resend."}
+            </button>
+            {resendStatus === 'success' && (
+              <p className="text-[10px] text-brand-primary mt-2">New link sent successfully!</p>
+            )}
+            {resendStatus === 'error' && (
+              <p className="text-[10px] text-brand-danger mt-2">Failed to resend. Please try again later.</p>
+            )}
+          </div>
+
           <Link 
             to="/login"
             className="w-full inline-flex bg-brand-primary text-white py-4 rounded-2xl font-bold hover:bg-brand-secondary transition-all items-center justify-center gap-3 shadow-xl shadow-brand-primary/10"

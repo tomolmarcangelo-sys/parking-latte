@@ -16,10 +16,32 @@ const Login: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  const [resending, setResending] = useState(false);
+  const [resendStatus, setResendStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+  const handleResendVerification = async () => {
+    if (!email) {
+      setError('Please enter your email to resend the verification link.');
+      return;
+    }
+
+    setResending(true);
+    setResendStatus('idle');
+    try {
+      await apiClient.post('/auth/resend-verification', { email });
+      setResendStatus('success');
+    } catch (err) {
+      setResendStatus('error');
+    } finally {
+      setResending(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setResendStatus('idle');
     
     try {
       const data = await apiClient.post('/auth/login', { email, password });
@@ -31,9 +53,9 @@ const Login: React.FC = () => {
       }
     } catch (err: any) {
       if (err.response?.status === 403 && err.response?.data?.notVerified) {
-        setError('Please verify your email address. Check your inbox for the verification link.');
+        setError('Please verify your email address before logging in.');
       } else {
-        setError('Invalid email or password');
+        setError(err.response?.data?.message || 'Invalid email or password');
       }
     } finally {
       setLoading(false);
@@ -82,13 +104,29 @@ const Login: React.FC = () => {
         </div>
 
         {error && (
-          <motion.p 
+          <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="text-brand-danger text-xs mb-6 text-center font-bold bg-brand-danger/10 p-4 rounded-2xl border border-brand-danger/20"
           >
-            {error}
-          </motion.p>
+            <p className="mb-2">{error}</p>
+            {error.includes('verify your email') && (
+              <button 
+                type="button" 
+                onClick={handleResendVerification}
+                disabled={resending}
+                className="text-brand-primary underline underline-offset-4 hover:text-brand-secondary transition-colors"
+              >
+                {resending ? 'Sending...' : 'Resend verification link'}
+              </button>
+            )}
+            {resendStatus === 'success' && (
+              <p className="text-brand-primary mt-2">Verification link sent! Please check your inbox.</p>
+            )}
+            {resendStatus === 'error' && (
+              <p className="text-brand-danger mt-2">Failed to send link. Please try again later.</p>
+            )}
+          </motion.div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">

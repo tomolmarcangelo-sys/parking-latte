@@ -27,6 +27,8 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
   }
 };
 
+const hashToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
+
 export const register = async (req: Request, res: Response) => {
   const { email, password, name } = req.body;
 
@@ -34,11 +36,12 @@ export const register = async (req: Request, res: Response) => {
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) return res.status(400).json({ message: 'User already exists' });
 
-    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const verificationToken = hashToken(rawToken);
     const verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = await prisma.user.create({
+    await prisma.user.create({
       data: {
         email,
         password: hashedPassword,
@@ -50,20 +53,51 @@ export const register = async (req: Request, res: Response) => {
       },
     });
 
-    await sendVerificationEmail(email, verificationToken);
+    await sendVerificationEmail(email, rawToken);
 
     res.status(201).json({ 
-      message: 'Registration successful. Please check your email to verify your account.',
+      message: 'Registration successful. If the email is valid, you will receive a verification link.',
       requiresVerification: true 
     });
   } catch (error: any) {
-    console.error('Registration error details:', {
-      message: error.message,
-      code: error.code,
-      meta: error.meta,
-      stack: error.stack
+    console.error('Registration error details:', error);
+    res.status(500).json({ message: 'Registration failed. Please try again later.' });
+  }
+};
+
+export const resendVerification = async (req: Request, res: Response) => {
+  const { email } = req.body;
+
+  if (!email) return res.status(400).json({ message: 'Email is required' });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    
+    // Generic response to prevent email enumeration
+    const genericResponse = { message: 'If an account exists with that email, a new verification link has been sent.' };
+
+    if (!user || user.emailVerified) {
+      return res.json(genericResponse);
+    }
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const verificationToken = hashToken(rawToken);
+    const verificationTokenExpiry = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 hour for resends
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        verificationToken,
+        verificationTokenExpiry,
+      },
     });
-    res.status(500).json({ message: `Registration failed: ${error.message || 'Server error'}` });
+
+    await sendVerificationEmail(email, rawToken);
+
+    res.json(genericResponse);
+  } catch (error) {
+    console.error('Resend verification error:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
@@ -73,16 +107,17 @@ export const verifyEmail = async (req: Request, res: Response) => {
   if (!token) return res.status(400).json({ message: 'Missing verification token' });
 
   try {
+    const hashedToken = hashToken(token as string);
     const user = await prisma.user.findUnique({
-      where: { verificationToken: token as string },
+      where: { verificationToken: hashedToken },
     });
 
     if (!user) {
-      return res.status(400).json({ message: 'Invalid or expired verification token' });
+      return res.status(400).json({ message: 'Invalid or expired verification link' });
     }
 
     if (user.verificationTokenExpiry && user.verificationTokenExpiry < new Date()) {
-      return res.status(400).json({ message: 'Verification token has expired' });
+      return res.status(400).json({ message: 'Verification link has expired. Please request a new one.' });
     }
 
     await prisma.user.update({
@@ -90,6 +125,7 @@ export const verifyEmail = async (req: Request, res: Response) => {
       data: {
         emailVerified: true,
         verificationToken: null,
+        verificationTokenExpiry: null,
       },
     });
 

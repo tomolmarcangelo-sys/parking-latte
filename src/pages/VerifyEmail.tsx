@@ -11,6 +11,26 @@ const VerifyEmail: React.FC = () => {
   const navigate = useNavigate();
   const token = searchParams.get('token');
 
+  const [resendEmail, setResendEmail] = useState('');
+  const [resending, setResending] = useState(false);
+  const [resendStatus, setResendStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+  const handleResend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resendEmail) return;
+    
+    setResending(true);
+    setResendStatus('idle');
+    try {
+      await apiClient.post('/auth/resend-verification', { email: resendEmail });
+      setResendStatus('success');
+    } catch (err) {
+      setResendStatus('error');
+    } finally {
+      setResending(false);
+    }
+  };
+
   useEffect(() => {
     const verify = async () => {
       if (!token) {
@@ -72,10 +92,38 @@ const VerifyEmail: React.FC = () => {
             <XCircle size={48} className="mx-auto text-brand-danger" />
             <h1 className="text-2xl font-serif font-bold text-brand-primary">Verification Failed</h1>
             <p className="text-text-muted">{message}</p>
+            
+            <div className="bg-bg-sidebar/30 p-6 rounded-[2rem] border border-border-subtle/50">
+              <p className="text-xs font-bold text-text-muted mb-4">Request a new verification link:</p>
+              <form onSubmit={handleResend} className="space-y-3">
+                <input 
+                  type="email" 
+                  placeholder="Your email address"
+                  required
+                  value={resendEmail}
+                  onChange={(e) => setResendEmail(e.target.value)}
+                  className="w-full p-3 rounded-xl bg-white border border-border-subtle focus:border-brand-primary outline-none text-sm transition-all"
+                />
+                <button 
+                  type="submit"
+                  disabled={resending}
+                  className="w-full bg-brand-primary text-white py-3 rounded-xl font-bold hover:bg-brand-secondary transition-all text-sm disabled:opacity-50"
+                >
+                  {resending ? 'Sending...' : 'Resend Link'}
+                </button>
+              </form>
+              {resendStatus === 'success' && (
+                <p className="text-[10px] text-brand-primary mt-3 font-bold">New link sent! Check your inbox.</p>
+              )}
+              {resendStatus === 'error' && (
+                <p className="text-[10px] text-brand-danger mt-3 font-bold">Failed to send. Please try again.</p>
+              )}
+            </div>
+
             <div className="pt-4 flex flex-col gap-4">
               <Link 
                 to="/register"
-                className="w-full bg-brand-primary text-white py-4 rounded-2xl font-bold hover:bg-brand-secondary transition-all inline-flex items-center justify-center gap-3"
+                className="w-full text-brand-primary py-4 rounded-2xl font-bold hover:bg-brand-primary/5 transition-all inline-flex items-center justify-center gap-3 border border-brand-primary/20"
               >
                 Create New Account
               </Link>
