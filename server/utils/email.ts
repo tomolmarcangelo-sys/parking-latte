@@ -1,11 +1,12 @@
 import nodemailer from 'nodemailer';
 
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.ethereal.email',
-  port: parseInt(process.env.SMTP_PORT || '587'),
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT),
+  secure: false,
   auth: {
-    user: process.env.SMTP_USER || 'no-reply@parkinglatte.com',
-    pass: process.env.SMTP_PASS || 'password',
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
   },
 });
 
@@ -14,7 +15,7 @@ export const sendVerificationEmail = async (email: string, token: string) => {
   const verificationUrl = `${appUrl}/verify-email?token=${token}`;
   
   // Use SMTP_FROM or fallback to SMTP_USER for sender identity consistency
-  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@parkinglatte.com';
+  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
 
   const mailOptions = {
     from: `"Parking Latte" <${fromEmail}>`,
