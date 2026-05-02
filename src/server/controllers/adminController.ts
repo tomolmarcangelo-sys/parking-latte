@@ -101,13 +101,31 @@ export const updateUserRole = async (req: Request, res: Response) => {
 };
 
 export const getAuditLogs = async (req: Request, res: Response) => {
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 50;
+  const skip = (page - 1) * limit;
+
   try {
-    const logs = await prisma.auditLog.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 100, // Limit to last 100 logs
+    const [logs, total] = await Promise.all([
+      prisma.auditLog.findMany({
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.auditLog.count(),
+    ]);
+
+    res.json({
+      logs,
+      pagination: {
+        total,
+        pages: Math.ceil(total / limit),
+        currentPage: page,
+        limit,
+      },
     });
-    res.json(logs);
   } catch (error) {
+    console.error('getAuditLogs error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };

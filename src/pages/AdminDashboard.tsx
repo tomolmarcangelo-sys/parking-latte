@@ -12,6 +12,8 @@ const AdminDashboard: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditPagination, setAuditPagination] = useState<any>(null);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [customizations, setCustomizations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
@@ -37,17 +39,34 @@ const AdminDashboard: React.FC = () => {
       apiClient.get('/admin/users'),
       apiClient.get('/admin/customizations'),
       apiClient.get('/menu/categories'),
-      apiClient.get('/admin/audit-logs')
-    ]).then(([statsData, invData, menuData, userData, customData, categoryData, auditData]) => {
+      apiClient.get('/admin/audit-logs?page=1&limit=20')
+    ]).then(([statsData, invData, menuData, userData, customData, categoryData, auditResponse]) => {
       setStats(statsData);
       setInventory(invData);
       setCategories(menuData);
       setUsers(userData);
       setCustomizations(customData);
       setCategoryList(categoryData);
-      setAuditLogs(auditData);
+      setAuditLogs(auditResponse.logs);
+      setAuditPagination(auditResponse.pagination);
       setLoading(false);
     });
+  };
+
+  const loadMoreAuditLogs = async () => {
+    if (!auditPagination || auditPagination.currentPage >= auditPagination.pages || auditLoading) return;
+    
+    setAuditLoading(true);
+    try {
+      const nextPage = auditPagination.currentPage + 1;
+      const response = await apiClient.get(`/admin/audit-logs?page=${nextPage}&limit=20`);
+      setAuditLogs(prev => [...prev, ...response.logs]);
+      setAuditPagination(response.pagination);
+    } catch (err) {
+      console.error('Failed to load more audit logs:', err);
+    } finally {
+      setAuditLoading(false);
+    }
   };
 
   const handleDeleteCategory = async (id: string) => {
@@ -60,13 +79,18 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
+
   const handleUpdateRole = async (userId: string, role: Role) => {
+    setUpdatingUserId(userId);
     try {
       await apiClient.put('/admin/users/role', { userId, role });
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
     } catch (err) {
       console.error('Failed to update role:', err);
       alert('Unauthorized or server error.');
+    } finally {
+      setUpdatingUserId(null);
     }
   };
 
@@ -354,27 +378,25 @@ const AdminDashboard: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-10 py-8">
-                      <RoleBadge role={u.role} />
+                       <RoleBadge role={u.role} loading={updatingUserId === u.id} />
                     </td>
                     <td className="px-10 py-8 text-right">
-                      <div className="flex justify-end gap-2">
-                         {(['CUSTOMER', 'STAFF', 'ADMIN'] as Role[]).map((r) => (
-                           <button
-                            key={r}
-                            onClick={() => handleUpdateRole(u.id, r)}
-                            disabled={u.role === r}
-                            className={`
-                              px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter transition-all
-                              ${u.role === r 
-                                ? 'bg-brand-primary text-white shadow-lg shadow-brand-primary/20 cursor-default' 
-                                : 'bg-bg-sidebar text-text-muted hover:text-brand-primary hover:bg-white border border-border-subtle/50'
-                              }
-                            `}
-                           >
-                             {u.role === r && <Check size={10} className="inline mr-1" />}
-                             {r}
-                           </button>
-                         ))}
+                      <div className="flex justify-end">
+                        <div className="relative group/sel">
+                          <select
+                            value={u.role}
+                            onChange={(e) => handleUpdateRole(u.id, e.target.value as Role)}
+                            disabled={updatingUserId === u.id}
+                            className="appearance-none bg-bg-sidebar border border-border-subtle/50 pl-4 pr-10 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-brand-primary cursor-pointer hover:bg-white hover:border-brand-primary/30 transition-all outline-none disabled:opacity-50"
+                          >
+                            <option value="CUSTOMER">Customer Account</option>
+                            <option value="STAFF">Service Staff</option>
+                            <option value="ADMIN">System Administrator</option>
+                          </select>
+                          <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-brand-primary/40 group-hover/sel:text-brand-primary transition-colors">
+                            <Settings2 size={12} />
+                          </div>
+                        </div>
                       </div>
                     </td>
                   </motion.tr>
@@ -640,6 +662,18 @@ const AdminDashboard: React.FC = () => {
               <div className="p-20 flex flex-col items-center justify-center opacity-40">
                 <Shield size={48} className="mb-4" />
                 <p className="font-bold">No security events recorded yet.</p>
+              </div>
+            )}
+            {auditPagination && auditPagination.currentPage < auditPagination.pages && (
+              <div className="p-8 border-t border-border-subtle bg-bg-sidebar/5 flex justify-center">
+                <button
+                  onClick={loadMoreAuditLogs}
+                  disabled={auditLoading}
+                  className="px-8 py-3 bg-white border border-border-subtle rounded-2xl text-sm font-bold text-brand-primary hover:bg-bg-sidebar transition-all flex items-center gap-2 disabled:opacity-50 shadow-sm"
+                >
+                  {auditLoading ? <Coffee size={18} className="animate-spin" /> : <History size={18} />}
+                  {auditLoading ? 'Loading logs...' : 'Load older events'}
+                </button>
               </div>
             )}
           </div>
@@ -1343,14 +1377,17 @@ const StatCard = ({ icon, label, value }: { icon: React.ReactNode, label: string
   </div>
 );
 
-const RoleBadge = ({ role }: { role: Role }) => {
+const RoleBadge = ({ role, loading }: { role: Role, loading?: boolean }) => {
   const styles = {
-    ADMIN: 'bg-brand-primary text-white',
-    STAFF: 'bg-brand-secondary text-white',
-    CUSTOMER: 'bg-bg-sidebar text-text-muted border border-border-subtle'
+    ADMIN: 'bg-brand-primary text-white border-transparent',
+    STAFF: 'bg-brand-secondary text-white border-transparent',
+    CUSTOMER: 'bg-bg-sidebar text-text-muted border-border-subtle'
   };
   return (
-    <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm ${styles[role]}`}>
+    <span className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm border transition-all ${styles[role]}`}>
+      {loading ? <Coffee size={10} className="animate-spin" /> : (
+        role === 'ADMIN' ? <Shield size={10} /> : role === 'STAFF' ? <Plus size={10} /> : null
+      )}
       {role}
     </span>
   );
