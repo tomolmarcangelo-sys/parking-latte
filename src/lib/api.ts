@@ -1,9 +1,18 @@
 const BASE_URL = '/api';
 
 const handleResponse = async (res: Response) => {
-  const data = await res.json();
+  const text = await res.text();
+  console.log('API Raw Response:', text);
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (e) {
+    console.error('API Response Parse Error:', e);
+    data = {};
+  }
   if (!res.ok) {
-    const error = new Error(data.message || 'API request failed');
+    console.error('API Error Response:', { status: res.status, data });
+    const error = new Error(data?.error || data?.message || 'API request failed');
     (error as any).response = {
       status: res.status,
       data: data

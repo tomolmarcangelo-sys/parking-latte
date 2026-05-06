@@ -25,6 +25,7 @@ export interface CustomizationGroup {
   name: string;
   required: boolean;
   choices: CustomizationChoice[];
+  products: { productId: string; product: Product }[];
 }
 
 export interface Product {

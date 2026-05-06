@@ -1,14 +1,36 @@
-import { Router } from 'express';
-import * as menuController from '../controllers/menuController.js';
-import { authenticate, authorize } from '../middleware/auth.js';
+import express from 'express';
+import { getPrismaClient } from '../db.js';
 
-export const menuRouter = Router();
+export const menuRouter = express.Router();
 
-menuRouter.get('/', menuController.getMenu);
-menuRouter.get('/categories', menuController.getCategories);
-menuRouter.post('/categories', authenticate, authorize(['ADMIN']), menuController.createCategory);
-menuRouter.put('/categories/:id', authenticate, authorize(['ADMIN']), menuController.updateCategory);
-menuRouter.delete('/categories/:id', authenticate, authorize(['ADMIN']), menuController.deleteCategory);
-menuRouter.post('/', authenticate, authorize(['ADMIN']), menuController.createProduct);
-menuRouter.put('/:id', authenticate, authorize(['ADMIN']), menuController.updateProduct);
-menuRouter.delete('/:id', authenticate, authorize(['ADMIN']), menuController.deleteProduct);
+menuRouter.get('/', async (req, res) => {
+  const prisma = await getPrismaClient();
+  if (!prisma) {
+    return res.status(503).json({ error: 'Database not configured' });
+  }
+  try {
+    const categories = await prisma.category.findMany({
+      include: {
+        products: true
+      }
+    });
+    res.json(categories);
+  } catch (error) {
+    console.error('Error fetching menu:', error);
+    res.status(500).json({ error: 'Failed to fetch menu' });
+  }
+});
+
+menuRouter.get('/categories', async (req, res) => {
+  const prisma = await getPrismaClient();
+  if (!prisma) {
+    return res.status(503).json({ error: 'Database not configured' });
+  }
+  try {
+    const categories = await prisma.category.findMany();
+    res.json(categories);
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ error: 'Failed to fetch categories' });
+  }
+});

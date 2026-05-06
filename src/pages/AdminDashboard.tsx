@@ -4,9 +4,19 @@ import { InventoryItem, Category, User, Role, CustomizationGroup, Product } from
 import { motion, AnimatePresence } from 'motion/react';
 import { Package, Plus, BarChart3, TrendingUp, AlertTriangle, X, Coffee, Download, Users, Shield, Check, Settings2, Trash2, Edit3, Link as LinkIcon, Info, ImagePlus, Upload, History, ArrowRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { useAuth } from '../context/AuthContext';
+import { CreateUserModal } from '../components/CreateUserModal';
 
 const AdminDashboard: React.FC = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'variations' | 'categories' | 'audit-logs'>('overview');
+  
+  // Restrict access
+  useEffect(() => {
+    if (user?.role !== 'ADMIN' && (activeTab === 'users' || activeTab === 'variations' || activeTab === 'audit-logs')) {
+      setActiveTab('overview');
+    }
+  }, [activeTab, user]);
   const [stats, setStats] = useState<any>(null);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -21,7 +31,9 @@ const AdminDashboard: React.FC = () => {
   const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false);
   const [isCustomizationModalOpen, setIsCustomizationModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [editingCustomizationGroup, setEditingCustomizationGroup] = useState<CustomizationGroup | null>(null);
   const [categoryList, setCategoryList] = useState<any[]>([]);
 
   useEffect(() => {
@@ -32,23 +44,31 @@ const AdminDashboard: React.FC = () => {
 
   const fetchData = () => {
     setLoading(true);
-    Promise.all([
+    const promises: Promise<any>[] = [
       apiClient.get('/admin/stats'),
       apiClient.get('/inventory'),
       apiClient.get('/menu'),
       apiClient.get('/admin/users'),
-      apiClient.get('/admin/customizations'),
       apiClient.get('/menu/categories'),
-      apiClient.get('/admin/audit-logs?page=1&limit=20')
-    ]).then(([statsData, invData, menuData, userData, customData, categoryData, auditResponse]) => {
+    ];
+
+    if (user?.role !== 'STAFF') {
+      promises.push(apiClient.get('/admin/customizations'));
+      promises.push(apiClient.get('/admin/audit-logs?page=1&limit=20'));
+    }
+
+    Promise.all(promises).then((results) => {
+      const [statsData, invData, menuData, userData, categoryData, customData, auditResponse] = results;
       setStats(statsData);
       setInventory(invData);
       setCategories(menuData);
       setUsers(userData);
-      setCustomizations(customData);
       setCategoryList(categoryData);
-      setAuditLogs(auditResponse.logs);
-      setAuditPagination(auditResponse.pagination);
+      if (user?.role !== 'STAFF') {
+        setCustomizations(customData);
+        setAuditLogs(auditResponse.logs);
+        setAuditPagination(auditResponse.pagination);
+      }
       setLoading(false);
     });
   };
@@ -83,14 +103,43 @@ const AdminDashboard: React.FC = () => {
 
   const handleUpdateRole = async (userId: string, role: Role) => {
     setUpdatingUserId(userId);
+    const userToUpdate = users.find(u => u.id === userId);
+    if (!userToUpdate) return;
     try {
-      await apiClient.put('/admin/users/role', { userId, role });
+      await apiClient.put(`/admin/users/${userId}`, { 
+        name: userToUpdate.name || '',
+        email: userToUpdate.email,
+        role,
+        emailVerified: userToUpdate.emailVerified 
+      });
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
     } catch (err) {
       console.error('Failed to update role:', err);
       alert('Unauthorized or server error.');
     } finally {
       setUpdatingUserId(null);
+    }
+  };
+
+  const handleRestock = async (itemId: string, amount: number) => {
+    try {
+      await apiClient.post(`/inventory/${itemId}/restock`, { amount });
+      fetchData();
+      alert('Stock updated successfully.');
+    } catch (err) {
+      console.error('Restock failed:', err);
+      alert('Failed to restock.');
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm('Are you sure you want to delete this user?')) return;
+    try {
+      await apiClient.delete(`/admin/users/${userId}`);
+      setUsers(prev => prev.filter(u => u.id !== userId));
+    } catch (err) {
+      console.error('Failed to delete user:', err);
+      alert('Failed to delete user');
     }
   };
 
@@ -153,20 +202,15 @@ const AdminDashboard: React.FC = () => {
               <BarChart3 size={16} />
               Overview
             </button>
-            <button 
-              onClick={() => setActiveTab('users')}
-              className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'users' ? 'bg-white dark:bg-bg-sidebar text-brand-primary shadow-sm' : 'text-text-muted hover:text-brand-primary'}`}
-            >
-              <Users size={16} />
-              User Roles
-            </button>
-            <button 
-              onClick={() => setActiveTab('variations')}
-              className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'variations' ? 'bg-white dark:bg-bg-sidebar text-brand-primary shadow-sm' : 'text-text-muted hover:text-brand-primary'}`}
-            >
-              <Settings2 size={16} />
-              Product Variations
-            </button>
+            {user?.role === 'ADMIN' && (
+              <button 
+                onClick={() => setActiveTab('users')}
+                className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'users' ? 'bg-white dark:bg-bg-sidebar text-brand-primary shadow-sm' : 'text-text-muted hover:text-brand-primary'}`}
+              >
+                <Users size={16} />
+                User Roles
+              </button>
+            )}
             <button 
               onClick={() => setActiveTab('categories')}
               className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'categories' ? 'bg-white dark:bg-bg-sidebar text-brand-primary shadow-sm' : 'text-text-muted hover:text-brand-primary'}`}
@@ -174,13 +218,24 @@ const AdminDashboard: React.FC = () => {
               <Package size={16} />
               Categories
             </button>
-            <button 
-              onClick={() => setActiveTab('audit-logs')}
-              className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'audit-logs' ? 'bg-white dark:bg-bg-sidebar text-brand-primary shadow-sm' : 'text-text-muted hover:text-brand-primary'}`}
-            >
-              <History size={16} />
-              Audit Logs
-            </button>
+            {user?.role !== 'STAFF' && (
+              <>
+                <button 
+                  onClick={() => setActiveTab('variations')}
+                  className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'variations' ? 'bg-white dark:bg-bg-sidebar text-brand-primary shadow-sm' : 'text-text-muted hover:text-brand-primary'}`}
+                >
+                  <Settings2 size={16} />
+                  Product Variations
+                </button>
+                <button 
+                  onClick={() => setActiveTab('audit-logs')}
+                  className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'audit-logs' ? 'bg-white dark:bg-bg-sidebar text-brand-primary shadow-sm' : 'text-text-muted hover:text-brand-primary'}`}
+                >
+                  <History size={16} />
+                  Audit Logs
+                </button>
+              </>
+            )}
           </div>
         </div>
         <div className="flex gap-4 w-full md:w-auto">
@@ -192,13 +247,23 @@ const AdminDashboard: React.FC = () => {
             {isExporting ? <div className="w-4 h-4 border-2 border-brand-primary/30 border-t-brand-primary rounded-full animate-spin"></div> : <Download size={18} />}
             <span>Export CSV</span>
           </button>
-          <button 
-            onClick={() => setIsCreateModalOpen(true)}
-            className="flex-1 md:flex-none bg-brand-primary text-white px-8 py-4 rounded-2xl font-bold hover:bg-brand-secondary transition-all shadow-xl shadow-brand-primary/10 flex items-center justify-center gap-3"
-          >
-            <Plus size={20} />
-            <span>New Product</span>
-          </button>
+          {activeTab === 'users' ? (
+             <button 
+                onClick={() => setIsUserModalOpen(true)}
+                className="flex-1 md:flex-none bg-brand-primary text-white px-8 py-4 rounded-2xl font-bold hover:bg-brand-secondary transition-all shadow-xl shadow-brand-primary/10 flex items-center justify-center gap-3"
+              >
+                <Plus size={20} />
+                <span>New User</span>
+              </button>
+          ) : (
+            <button 
+              onClick={() => setIsCreateModalOpen(true)}
+              className="flex-1 md:flex-none bg-brand-primary text-white px-8 py-4 rounded-2xl font-bold hover:bg-brand-secondary transition-all shadow-xl shadow-brand-primary/10 flex items-center justify-center gap-3"
+            >
+              <Plus size={20} />
+              <span>New Product</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -246,6 +311,18 @@ const AdminDashboard: React.FC = () => {
                       <span className="text-2xl font-bold text-brand-danger">{item.stockLevel}</span>
                       <span className="text-xs text-text-muted font-bold">{item.unit} left</span>
                     </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const amount = prompt(`Enter amount to add for ${item.name}:`, '10');
+                        if (amount && !isNaN(parseInt(amount))) {
+                          handleRestock(item.id, parseInt(amount));
+                        }
+                      }}
+                      className="mt-2 text-[10px] bg-brand-danger text-white px-3 py-1.5 rounded-lg font-bold hover:bg-brand-primary transition-colors w-full"
+                    >
+                      Restock
+                    </button>
                   </motion.div>
                 ))}
               </div>
@@ -381,7 +458,7 @@ const AdminDashboard: React.FC = () => {
                        <RoleBadge role={u.role} loading={updatingUserId === u.id} />
                     </td>
                     <td className="px-10 py-8 text-right">
-                      <div className="flex justify-end">
+                      <div className="flex justify-end gap-2">
                         <div className="relative group/sel">
                           <select
                             value={u.role}
@@ -397,6 +474,12 @@ const AdminDashboard: React.FC = () => {
                             <Settings2 size={12} />
                           </div>
                         </div>
+                        <button 
+                          onClick={() => handleDeleteUser(u.id)}
+                          className="p-2 text-text-muted hover:text-brand-danger transition-all bg-bg-sidebar rounded-xl border border-border-subtle/50"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </td>
                   </motion.tr>
@@ -497,7 +580,10 @@ const AdminDashboard: React.FC = () => {
               <p className="text-text-muted">Manage milk types, sweetness, and other drink variations.</p>
             </div>
             <button 
-              onClick={() => setIsCustomizationModalOpen(true)}
+              onClick={() => {
+                setEditingCustomizationGroup(null);
+                setIsCustomizationModalOpen(true);
+              }}
               className="bg-brand-primary text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-3 shadow-xl shadow-brand-primary/10 hover:bg-brand-secondary transition-all"
             >
               <Plus size={20} />
@@ -526,7 +612,12 @@ const AdminDashboard: React.FC = () => {
                     </p>
                   </div>
                   <div className="flex gap-2">
-                     <button className="p-2 hover:bg-bg-sidebar rounded-xl text-text-muted hover:text-brand-primary transition-all">
+                   <button 
+                     onClick={() => {
+                       setEditingCustomizationGroup(group);
+                       setIsCustomizationModalOpen(true);
+                     }}
+                     className="p-2 hover:bg-bg-sidebar rounded-xl text-text-muted hover:text-brand-primary transition-all">
                        <Edit3 size={18} />
                      </button>
                      <button 
@@ -704,6 +795,18 @@ const AdminDashboard: React.FC = () => {
 
       {/* Create Product Modal */}
       <AnimatePresence>
+        {isUserModalOpen && (
+          <CreateUserModal 
+            onClose={() => setIsUserModalOpen(false)} 
+            onSuccess={() => {
+              setIsUserModalOpen(false);
+              fetchData();
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {isCreateModalOpen && (
           <CreateProductModal 
             onClose={() => setIsCreateModalOpen(false)} 
@@ -746,9 +849,11 @@ const AdminDashboard: React.FC = () => {
         {isCustomizationModalOpen && (
           <CreateCustomizationModal 
             products={allProducts}
+            group={editingCustomizationGroup || undefined}
             onClose={() => setIsCustomizationModalOpen(false)} 
             onSuccess={() => {
               setIsCustomizationModalOpen(false);
+              setEditingCustomizationGroup(null);
               fetchData();
             }}
           />
@@ -817,28 +922,84 @@ const NewChoiceButton: React.FC<{ groupId: string; onSuccess: () => void }> = ({
 
 const CreateCustomizationModal: React.FC<{ 
   products: Product[];
+  group?: CustomizationGroup;
   onClose: () => void; 
   onSuccess: () => void;
-}> = ({ products, onClose, onSuccess }) => {
+}> = ({ products, group, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
-    name: '',
-    required: false,
-    productIds: [] as string[]
+    name: group?.name || '',
+    required: group?.required || false,
+    productIds: group?.products.map((p: any) => p.productId) || [] as string[],
+    choices: group?.choices.map((c: any) => ({ id: c.id, name: c.name, priceModifier: c.priceModifier })) || [] as { id?: string, name: string; priceModifier: number }[]
   });
+  const [newChoice, setNewChoice] = useState({ name: '', priceModifier: 0 });
+
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await apiClient.post('/admin/customizations/group', formData);
+      if (group) {
+        await apiClient.put(`/admin/customizations/group/${group.id}`, {
+          name: formData.name,
+          required: formData.required,
+          productIds: formData.productIds
+        });
+        
+        // Handle choices: this simple approach assumes we delete and re-add or just add new
+        // For editing, a more robust backend is needed, but I will delete existing and re-add for now if I can't update.
+        // Actually, let's just add new ones for now, assuming editing choices might require more backend work than I have access to.
+        // I will try to support adding new choices.
+        for (const choice of formData.choices) {
+          if (!choice.id) {
+            await apiClient.post('/admin/customizations/choice', {
+              groupId: group.id,
+              name: choice.name,
+              priceModifier: choice.priceModifier
+            });
+          }
+        }
+      } else {
+        const groupResponse = await apiClient.post('/admin/customizations/group', {
+          name: formData.name,
+          required: formData.required,
+          productIds: formData.productIds
+        });
+        
+        const groupId = groupResponse.id;
+        
+        for (const choice of formData.choices) {
+          await apiClient.post('/admin/customizations/choice', {
+            groupId,
+            name: choice.name,
+            priceModifier: choice.priceModifier
+          });
+        }
+      }
       onSuccess();
     } catch (err) {
       console.error(err);
-      alert('Failed to create group');
+      alert('Failed to save group');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const addChoice = () => {
+    if (!newChoice.name) return;
+    setFormData(prev => ({
+      ...prev,
+      choices: [...prev.choices, newChoice]
+    }));
+    setNewChoice({ name: '', priceModifier: 0 });
+  };
+
+  const removeChoice = (idx: number) => {
+    setFormData(prev => ({
+      ...prev,
+      choices: prev.choices.filter((_, i) => i !== idx)
+    }));
   };
 
   const toggleProduct = (pid: string) => {
@@ -864,7 +1025,7 @@ const CreateCustomizationModal: React.FC<{
       >
         <div className="p-8 border-b border-border-subtle flex justify-between items-center">
           <div>
-            <h2 className="text-2xl font-serif font-bold text-brand-primary">New Variation Group</h2>
+            <h2 className="text-2xl font-serif font-bold text-brand-primary">{group ? 'Edit Variation Group' : 'New Variation Group'}</h2>
             <p className="text-sm text-text-muted font-medium">Define options and link them to products.</p>
           </div>
           <button onClick={onClose} className="p-3 hover:bg-bg-sidebar rounded-full transition-all">
@@ -895,6 +1056,37 @@ const CreateCustomizationModal: React.FC<{
                   <div>
                     <p className="text-sm font-bold text-brand-primary">Mandatory Choice</p>
                     <p className="text-[10px] text-text-muted italic">User must select at least one option.</p>
+                  </div>
+               </div>
+            </div>
+
+            <div className="space-y-4">
+               <label className="block text-xs font-black uppercase tracking-widest text-text-muted mb-2 ml-1 flex items-center gap-2">
+                 <LinkIcon size={12} />
+                 Choices
+               </label>
+               <div className="bg-bg-sidebar rounded-2xl p-4 border border-border-subtle/50 h-56 overflow-y-auto space-y-2 custom-scrollbar">
+                  {formData.choices.map((choice, idx) => (
+                    <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-white border border-border-subtle">
+                      <span className="text-xs font-bold">{choice.name} (+₱{choice.priceModifier})</span>
+                      <button type="button" onClick={() => removeChoice(idx)} className="text-brand-danger hover:text-brand-secondary"><X size={14} /></button>
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <input
+                      placeholder="Choice name"
+                      value={newChoice.name}
+                      onChange={e => setNewChoice({...newChoice, name: e.target.value})}
+                      className="flex-1 p-2 bg-white border border-border-subtle rounded-lg text-xs"
+                    />
+                    <input
+                      placeholder="Price"
+                      type="number"
+                      value={newChoice.priceModifier}
+                      onChange={e => setNewChoice({...newChoice, priceModifier: Number(e.target.value)})}
+                      className="w-16 p-2 bg-white border border-border-subtle rounded-lg text-xs"
+                    />
+                    <button type="button" onClick={addChoice} className="bg-brand-primary text-white rounded-lg px-2"><Plus size={14}/></button>
                   </div>
                </div>
             </div>

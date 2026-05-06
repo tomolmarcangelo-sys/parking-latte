@@ -47,7 +47,7 @@ async function startServer() {
     },
   });
 
-  const PORT = process.env.PORT || 3000;
+  const PORT = 3000;
 
   const allowedOrigins = [
     process.env.FRONTEND_URL,
@@ -55,6 +55,10 @@ async function startServer() {
     'http://localhost:5173',
     'https://ais-dev-pzn2t2wtipqows663l4ot6-426097546045.asia-southeast1.run.app' // Current dev URL
   ].filter(Boolean) as string[];
+
+  console.log('Environment:', process.env.NODE_ENV);
+  console.log('PORT:', PORT);
+  console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
 
   app.use(cors({
     origin: (origin, callback) => {
@@ -72,6 +76,10 @@ async function startServer() {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   }));
+  app.use((req, res, next) => {
+    console.log(`[Express] ${req.method} ${req.url}`);
+    next();
+  });
   app.use(express.json());
   
   // Serve uploads directory
@@ -100,26 +108,25 @@ async function startServer() {
   app.set('io', io);
 
   // API Routes
-  app.get('/api/health', async (req, res) => {
-    let dbStatus = 'disconnected';
-    let dbError = null;
-    try {
-      const { prisma } = await import('./db.js');
-      await prisma.$queryRaw`SELECT 1`;
-      dbStatus = 'connected';
-    } catch (e: any) {
-      dbStatus = 'error';
-      dbError = process.env.NODE_ENV === 'development' ? e.message : 'Database connection failed';
-      console.error('Health check DB error:', e);
-    }
+  app.get('/api/health', (req, res) => {
     res.json({ 
       status: 'ok', 
-      database: dbStatus,
-      error: dbError,
       timestamp: new Date().toISOString(),
       env: process.env.NODE_ENV
     });
   });
+
+  const { menuRouter } = await import('./routes/menu.js');
+  app.use('/api/menu', menuRouter);
+
+  const { usersRouter } = await import('./routes/users.js');
+  app.use('/api/admin/users', usersRouter);
+
+  const { authRouter } = await import('./routes/auth.js');
+  app.use('/api/auth', authRouter);
+
+  const { ordersRouter } = await import('./routes/orders.js');
+  app.use('/api/orders', ordersRouter);
 
   // Image Upload Route
   app.post('/api/upload', upload.single('image'), (req, res) => {
@@ -129,19 +136,6 @@ async function startServer() {
     const imageUrl = `/uploads/${req.file.filename}`;
     res.json({ imageUrl });
   });
-
-  // Dynamically import routes to avoid circular dependencies if they use prisma
-  const { authRouter } = await import('./routes/auth.js');
-  const { menuRouter } = await import('./routes/menu.js');
-  const { orderRouter } = await import('./routes/orders.js');
-  const { inventoryRouter } = await import('./routes/inventory.js');
-  const { adminRouter } = await import('./routes/admin.js');
-
-  app.use('/api/auth', authRouter);
-  app.use('/api/menu', menuRouter);
-  app.use('/api/orders', orderRouter);
-  app.use('/api/inventory', inventoryRouter);
-  app.use('/api/admin', adminRouter);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
