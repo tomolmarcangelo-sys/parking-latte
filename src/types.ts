@@ -6,6 +6,7 @@ export interface User {
   email: string;
   name?: string;
   role: Role;
+  emailVerified?: boolean;
 }
 
 export interface Category {
@@ -24,6 +25,7 @@ export interface CustomizationGroup {
   id: string;
   name: string;
   required: boolean;
+  allowMultiple?: boolean;
   choices: CustomizationChoice[];
   products: { productId: string; product: Product }[];
 }
@@ -34,13 +36,22 @@ export interface Product {
   description?: string;
   price: number;
   imageUrl?: string;
+  isVisible: boolean;
   categoryId: string;
   customizationGroups?: CustomizationGroup[];
+  ingredients?: ProductIngredient[];
+}
+
+export interface ProductIngredient {
+  id: string;
+  productId: string;
+  inventoryItemId: string;
+  quantityNeeded: number;
 }
 
 export interface CartItem extends Product {
   quantity: number;
-  customization?: Record<string, string>; // Group Name -> Choice Name
+  customization?: Record<string, string | string[]>; // Group Name -> Choice Name(s)
   selectedChoices?: CustomizationChoice[]; // To track total cost better
 }
 
@@ -69,4 +80,5 @@ export interface InventoryItem {
   unit: string;
   stockLevel: number;
   lowStockThreshold: number;
+  updatedAt: string;
 }

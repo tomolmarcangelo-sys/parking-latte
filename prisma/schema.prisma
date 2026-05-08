@@ -50,6 +50,7 @@ model Product {
   description     String?
   price           Decimal                @db.Decimal(10, 2)
   imageUrl        String?
+  isVisible       Boolean                @default(true)
   category        Category               @relation(fields: [categoryId], references: [id])
   categoryId      String
   ingredients     ProductIngredient[]
@@ -60,11 +61,12 @@ model Product {
 }
 
 model CustomizationGroup {
-  id       String                 @id @default(uuid())
-  name     String // e.g., "Milk Type", "Size"
-  required Boolean                @default(false)
-  choices  CustomizationChoice[]
-  products ProductCustomization[]
+  id            String                 @id @default(uuid())
+  name          String // e.g., "Milk Type", "Size"
+  required      Boolean                @default(false)
+  allowMultiple Boolean                @default(false)
+  choices       CustomizationChoice[]
+  products      ProductCustomization[]
 }
 
 model ProductCustomization {

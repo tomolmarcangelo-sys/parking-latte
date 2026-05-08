@@ -17,13 +17,23 @@ const Orders: React.FC = () => {
     
     fetchOrders();
 
+    console.log('[Socket] Connecting for user orders...');
     const socket = io('/', {
-      auth: { token }
+      auth: { token },
+      transports: ['websocket', 'polling']
     });
 
-    socket.emit('join-room', user.id);
+    socket.on('connect', () => {
+      console.log('[Socket] Connected for user orders');
+      socket.emit('join-room', user.id);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('[Socket] User socket error:', err);
+    });
 
     socket.on('order-updated', (updatedOrder: Order) => {
+      console.log('[Socket] Order updated for user:', updatedOrder.id, updatedOrder.status);
       setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
     });
 
@@ -137,9 +147,9 @@ const Orders: React.FC = () => {
                       </span>
                       {item.customization && Object.keys(item.customization as object).length > 0 && (
                         <div className="flex flex-wrap gap-x-2 px-1">
-                          {Object.entries(item.customization as Record<string, string>).map(([k, v]) => (
+                          {Object.entries(item.customization as Record<string, string | string[]>).map(([k, v]) => (
                             <span key={k} className="text-[9px] uppercase tracking-tighter text-brand-secondary font-bold whitespace-nowrap">
-                              {v}
+                              {Array.isArray(v) ? v.join(', ') : v}
                             </span>
                           ))}
                         </div>

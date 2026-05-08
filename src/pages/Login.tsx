@@ -6,6 +6,7 @@ import { apiClient } from '../lib/api';
 import { motion } from 'motion/react';
 import { GoogleLogin } from '@react-oauth/google';
 import AuthNavbar from '../components/navigation/AuthNavbar';
+import toast from 'react-hot-toast';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -30,8 +31,10 @@ const Login: React.FC = () => {
     try {
       await apiClient.post('/auth/resend-verification', { email });
       setResendStatus('success');
+      toast.success('Verification link resent!');
     } catch (err) {
       setResendStatus('error');
+      toast.error('Failed to resend verification link.');
     } finally {
       setResending(false);
     }
@@ -47,6 +50,7 @@ const Login: React.FC = () => {
       const data = await apiClient.post('/auth/login', { email, password });
       if (data.token) {
         login(data.token, data.user);
+        toast.success(`Welcome back, ${data.user.name}!`);
         navigate('/');
       } else {
         setError('Invalid email or password');
@@ -71,6 +75,7 @@ const Login: React.FC = () => {
       });
       if (data.token) {
         login(data.token, data.user);
+        toast.success(`Welcome, ${data.user.name}!`);
         navigate('/');
       }
     } catch (err) {
@@ -81,8 +86,9 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-bg-base relative overflow-hidden pt-24 md:pt-20">
+    <div className="min-h-screen flex flex-col bg-bg-base relative overflow-hidden">
       <AuthNavbar />
+      <div className="flex-1 flex items-center justify-center p-4">
       
       {/* Background Orbs */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-brand-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
@@ -213,6 +219,7 @@ const Login: React.FC = () => {
           </Link>
         </div>
       </motion.div>
+      </div>
     </div>
   );
 };

@@ -7,7 +7,7 @@ const AuthNavbar: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-bg-sidebar/80 backdrop-blur-md border-b border-border-subtle/30 px-4 py-3 md:px-8">
+    <nav className="sticky top-0 left-0 right-0 z-50 bg-white/80 dark:bg-bg-sidebar/80 backdrop-blur-md border-b border-border-subtle/30 px-4 py-3 md:px-8">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         <motion.button
           whileHover={{ x: -4 }}

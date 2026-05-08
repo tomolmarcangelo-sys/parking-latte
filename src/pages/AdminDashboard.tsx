@@ -1,15 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { apiClient } from '../lib/api';
 import { InventoryItem, Category, User, Role, CustomizationGroup, Product } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Package, Plus, BarChart3, TrendingUp, AlertTriangle, X, Coffee, Download, Users, Shield, Check, Settings2, Trash2, Edit3, Link as LinkIcon, Info, ImagePlus, Upload, History, ArrowRight } from 'lucide-react';
+import { Package, Plus, BarChart3, TrendingUp, AlertTriangle, X, Coffee, Download, Users, Shield, Check, Settings2, Trash2, Edit3, Link as LinkIcon, Info, ImagePlus, Upload, History, ArrowRight, Search, KeyRound, RefreshCw, ChevronDown, ChevronUp, Eye, EyeOff } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { useAuth } from '../context/AuthContext';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { CreateUserModal } from '../components/CreateUserModal';
+import { UserEditModal } from '../components/UserEditModal';
+import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
+import { toast } from 'react-hot-toast';
 
 const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'variations' | 'categories' | 'audit-logs'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'products' | 'variations' | 'categories' | 'inventory' | 'audit-logs'>('overview');
   
   // Restrict access
   useEffect(() => {
@@ -34,21 +38,51 @@ const AdminDashboard: React.FC = () => {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [editingCustomizationGroup, setEditingCustomizationGroup] = useState<CustomizationGroup | null>(null);
+  
+  // New user management states
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
+
   const [categoryList, setCategoryList] = useState<any[]>([]);
+  const [productSearch, setProductSearch] = useState('');
+  const [productCategoryFilter, setProductCategoryFilter] = useState('all');
+  const [inventorySearch, setInventorySearch] = useState('');
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  const allProducts = categories.flatMap(c => c.products);
+  const allProducts = useMemo(() => categories.flatMap(c => c.products), [categories]);
+  
+  const filteredProducts = useMemo(() => {
+    return allProducts.filter(product => {
+      const matchesSearch = product.name.toLowerCase().includes(productSearch.toLowerCase()) || 
+                            (product.description || '').toLowerCase().includes(productSearch.toLowerCase());
+      const matchesCategory = productCategoryFilter === 'all' || product.categoryId === productCategoryFilter;
+      return matchesSearch && matchesCategory;
+    }).sort((a, b) => {
+      const catA = categoryList.find(c => c.id === a.categoryId)?.name || '';
+      const catB = categoryList.find(c => c.id === b.categoryId)?.name || '';
+      if (catA !== catB) return catA.localeCompare(catB);
+      return a.name.localeCompare(b.name);
+    });
+  }, [allProducts, productSearch, productCategoryFilter, categoryList]);
+
+  const filteredInventory = useMemo(() => {
+    if (!inventorySearch) return inventory;
+    return inventory.filter(item => 
+      item.name.toLowerCase().includes(inventorySearch.toLowerCase())
+    );
+  }, [inventory, inventorySearch]);
 
   const fetchData = () => {
     setLoading(true);
     const promises: Promise<any>[] = [
       apiClient.get('/admin/stats'),
       apiClient.get('/inventory'),
-      apiClient.get('/menu'),
-      apiClient.get('/admin/users'),
+      apiClient.get('/menu?admin=true'),
+      apiClient.get('/users'),
       apiClient.get('/menu/categories'),
     ];
 
@@ -106,16 +140,17 @@ const AdminDashboard: React.FC = () => {
     const userToUpdate = users.find(u => u.id === userId);
     if (!userToUpdate) return;
     try {
-      await apiClient.put(`/admin/users/${userId}`, { 
+      await apiClient.put(`/users/${userId}`, { 
         name: userToUpdate.name || '',
         email: userToUpdate.email,
         role,
         emailVerified: userToUpdate.emailVerified 
       });
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
-    } catch (err) {
+      toast.success('User role updated');
+    } catch (err: any) {
       console.error('Failed to update role:', err);
-      alert('Unauthorized or server error.');
+      toast.error(err.message || 'Failed to update role');
     } finally {
       setUpdatingUserId(null);
     }
@@ -132,14 +167,19 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleDeleteUser = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
+  const handleConfirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    setIsDeletingUser(true);
     try {
-      await apiClient.delete(`/admin/users/${userId}`);
-      setUsers(prev => prev.filter(u => u.id !== userId));
-    } catch (err) {
+      await apiClient.delete(`/users/${userToDelete.id}`);
+      setUsers(prev => prev.filter(u => u.id !== userToDelete.id));
+      toast.success('User deleted successfully');
+      setUserToDelete(null);
+    } catch (err: any) {
       console.error('Failed to delete user:', err);
-      alert('Failed to delete user');
+      toast.error(err.message || 'Failed to delete user');
+    } finally {
+      setIsDeletingUser(false);
     }
   };
 
@@ -156,7 +196,14 @@ const AdminDashboard: React.FC = () => {
         order.status,
         Number(order.totalAmount).toFixed(2),
         new Date(order.createdAt).toLocaleString(),
-        order.items.map((i: any) => `${i.quantity}x ${i.product.name}`).join('; ')
+        order.items.map((i: any) => {
+          let itemStr = `${i.quantity}x ${i.product.name}`;
+          if (i.customization && Object.keys(i.customization).length > 0) {
+            const custStr = Object.entries(i.customization).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' | ');
+            itemStr += ` (${custStr})`;
+          }
+          return itemStr;
+        }).join('; ')
       ]);
 
       const csvContent = [
@@ -186,7 +233,34 @@ const AdminDashboard: React.FC = () => {
   const lowStockItems = inventory.filter(i => i.stockLevel <= i.lowStockThreshold);
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-8">
+      {lowStockItems.length > 0 && (
+        <motion.div 
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          className="bg-brand-danger px-6 py-4 rounded-[24px] flex items-center justify-between gap-4 shadow-xl shadow-brand-danger/20 mb-8 border border-white/10"
+        >
+          <div className="flex items-center gap-4 text-white">
+            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20">
+              <AlertTriangle size={24} />
+            </div>
+            <div>
+              <p className="text-sm font-black uppercase tracking-widest opacity-80">Critical System Alert</p>
+              <h3 className="text-lg font-bold">
+                {lowStockItems.length} inventory item{lowStockItems.length > 1 ? 's' : ''} critically low
+              </h3>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setActiveTab('inventory')}
+              className="bg-white text-brand-danger px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
+            >
+              Restock Now
+            </button>
+          </div>
+        </motion.div>
+      )}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div className="space-y-4">
           <div className="space-y-1">
@@ -212,11 +286,25 @@ const AdminDashboard: React.FC = () => {
               </button>
             )}
             <button 
+              onClick={() => setActiveTab('inventory')}
+              className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'inventory' ? 'bg-white dark:bg-bg-sidebar text-brand-primary shadow-sm' : 'text-text-muted hover:text-brand-primary'}`}
+            >
+              <Package size={16} />
+              Inventory
+            </button>
+            <button 
               onClick={() => setActiveTab('categories')}
               className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'categories' ? 'bg-white dark:bg-bg-sidebar text-brand-primary shadow-sm' : 'text-text-muted hover:text-brand-primary'}`}
             >
-              <Package size={16} />
+              <Settings2 size={16} />
               Categories
+            </button>
+            <button 
+              onClick={() => setActiveTab('products')}
+              className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'products' ? 'bg-white dark:bg-bg-sidebar text-brand-primary shadow-sm' : 'text-text-muted hover:text-brand-primary'}`}
+            >
+              <Coffee size={16} />
+              Products
             </button>
             {user?.role !== 'STAFF' && (
               <>
@@ -295,36 +383,47 @@ const AdminDashboard: React.FC = () => {
                 <h2 className="text-xl font-serif font-bold text-brand-primary">Low Stock Alerts</h2>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {lowStockItems.map(item => (
-                  <motion.div
-                    key={item.id}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="bg-red-50 border border-brand-danger/20 rounded-2xl p-5 flex flex-col gap-2 relative overflow-hidden group shadow-sm"
-                  >
-                    <div className="absolute top-0 right-0 p-2 bg-brand-danger/10 group-hover:bg-brand-danger/20 transition-colors">
-                      <AlertTriangle size={14} className="text-brand-danger" />
-                    </div>
-                    <p className="text-[10px] font-bold text-brand-danger uppercase tracking-widest">Reorder Level</p>
-                    <h3 className="font-bold text-brand-primary truncate">{item.name}</h3>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-2xl font-bold text-brand-danger">{item.stockLevel}</span>
-                      <span className="text-xs text-text-muted font-bold">{item.unit} left</span>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const amount = prompt(`Enter amount to add for ${item.name}:`, '10');
-                        if (amount && !isNaN(parseInt(amount))) {
-                          handleRestock(item.id, parseInt(amount));
-                        }
-                      }}
-                      className="mt-2 text-[10px] bg-brand-danger text-white px-3 py-1.5 rounded-lg font-bold hover:bg-brand-primary transition-colors w-full"
+                {lowStockItems.map(item => {
+                  const isCritical = item.stockLevel === 0;
+                  return (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className={`border rounded-2xl p-5 flex flex-col gap-2 relative overflow-hidden group shadow-sm transition-all ${
+                        isCritical ? 'bg-red-100 border-brand-danger shadow-brand-danger/10' : 'bg-red-50 border-brand-danger/20'
+                      }`}
                     >
-                      Restock
-                    </button>
-                  </motion.div>
-                ))}
+                      <div className="absolute top-0 right-0 p-2 bg-brand-danger/10 group-hover:bg-brand-danger/20 transition-colors">
+                        <AlertTriangle size={14} className={isCritical ? 'text-brand-danger animate-pulse' : 'text-brand-danger'} />
+                      </div>
+                      <p className={`text-[10px] font-bold uppercase tracking-widest ${isCritical ? 'text-brand-danger' : 'text-brand-danger/60'}`}>
+                        {isCritical ? 'Critical Alert' : 'Reorder Level'}
+                      </p>
+                      <h3 className="font-bold text-brand-primary truncate">{item.name}</h3>
+                      <div className="flex items-baseline gap-1">
+                        <span className={`text-2xl font-black ${isCritical ? 'text-brand-danger animate-pulse' : 'text-brand-danger'}`}>
+                          {item.stockLevel}
+                        </span>
+                        <span className="text-xs text-text-muted font-bold">{item.unit} left</span>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const amount = prompt(`Enter amount to add for ${item.name}:`, '10');
+                          if (amount && !isNaN(parseInt(amount))) {
+                            handleRestock(item.id, parseInt(amount));
+                          }
+                        }}
+                        className={`mt-2 text-[10px] text-white px-3 py-1.5 rounded-lg font-bold transition-colors w-full ${
+                          isCritical ? 'bg-brand-primary hover:bg-brand-danger shadow-lg shadow-brand-danger/20' : 'bg-brand-danger hover:bg-brand-primary'
+                        }`}
+                      >
+                        Restock {item.name}
+                      </button>
+                    </motion.div>
+                  );
+                })}
               </div>
             </section>
           )}
@@ -372,11 +471,16 @@ const AdminDashboard: React.FC = () => {
               <div className="space-y-5 max-h-[400px] overflow-y-auto pr-4 custom-scrollbar">
                 {inventory.map((item) => {
                   const isLow = item.stockLevel <= item.lowStockThreshold;
+                  const isCritical = item.stockLevel === 0;
                   return (
                     <div 
                       key={item.id} 
-                      className={`flex flex-col gap-2 p-4 rounded-2xl transition-all ${
-                        isLow ? 'bg-red-50/50 border border-brand-danger/10 shadow-inner' : 'hover:bg-bg-sidebar/50'
+                      className={`flex flex-col gap-2 p-4 rounded-2xl transition-all border ${
+                        isCritical
+                          ? 'bg-red-100 border-brand-danger shadow-md ring-2 ring-brand-danger/20'
+                          : isLow 
+                            ? 'bg-red-50 border-brand-danger/30 shadow-sm ring-1 ring-brand-danger/10' 
+                            : 'bg-bg-sidebar/30 border-transparent hover:bg-bg-sidebar/50'
                       }`}
                     >
                       <div className="flex justify-between items-center text-sm">
@@ -384,7 +488,9 @@ const AdminDashboard: React.FC = () => {
                           <div className={`w-2 h-2 rounded-full ${isLow ? 'bg-brand-danger animate-pulse' : 'bg-brand-secondary'}`}></div>
                           <span className="font-bold text-brand-primary">{item.name}</span>
                           {isLow && (
-                            <span className="text-[8px] bg-brand-danger text-white px-1.5 py-0.5 rounded-md font-black uppercase tracking-tighter">Low</span>
+                            <span className={`text-[8px] text-white px-2 py-0.5 rounded-md font-black uppercase tracking-tight shadow-sm ${isCritical ? 'bg-brand-danger animate-pulse' : 'bg-brand-danger'}`}>
+                              {isCritical ? 'Depleted' : 'Low Stock'}
+                            </span>
                           )}
                         </div>
                         <span className={`font-bold ${isLow ? 'text-brand-danger' : 'text-text-muted'}`}>
@@ -459,24 +565,16 @@ const AdminDashboard: React.FC = () => {
                     </td>
                     <td className="px-10 py-8 text-right">
                       <div className="flex justify-end gap-2">
-                        <div className="relative group/sel">
-                          <select
-                            value={u.role}
-                            onChange={(e) => handleUpdateRole(u.id, e.target.value as Role)}
-                            disabled={updatingUserId === u.id}
-                            className="appearance-none bg-bg-sidebar border border-border-subtle/50 pl-4 pr-10 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-brand-primary cursor-pointer hover:bg-white hover:border-brand-primary/30 transition-all outline-none disabled:opacity-50"
-                          >
-                            <option value="CUSTOMER">Customer Account</option>
-                            <option value="STAFF">Service Staff</option>
-                            <option value="ADMIN">System Administrator</option>
-                          </select>
-                          <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-brand-primary/40 group-hover/sel:text-brand-primary transition-colors">
-                            <Settings2 size={12} />
-                          </div>
-                        </div>
                         <button 
-                          onClick={() => handleDeleteUser(u.id)}
+                          onClick={() => setEditingUser(u)}
+                          className="p-2 text-text-muted hover:text-brand-primary transition-all bg-bg-sidebar rounded-xl border border-border-subtle/50"
+                        >
+                          <Edit3 size={16} />
+                        </button>
+                        <button 
+                          onClick={() => setUserToDelete(u)}
                           className="p-2 text-text-muted hover:text-brand-danger transition-all bg-bg-sidebar rounded-xl border border-border-subtle/50"
+                          disabled={u.id === user?.id}
                         >
                           <Trash2 size={16} />
                         </button>
@@ -486,6 +584,219 @@ const AdminDashboard: React.FC = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </section>
+      ) : activeTab === 'inventory' ? (
+        <section className="space-y-8">
+           <div className="flex justify-between items-center">
+            <div className="space-y-1">
+              <h2 className="text-3xl font-serif font-bold text-brand-primary">Stock Inventory</h2>
+              <p className="text-text-muted">Monitor and replenish raw materials and ingredients.</p>
+            </div>
+            <button 
+              onClick={() => setIsInventoryModalOpen(true)}
+              className="bg-brand-primary text-white px-8 py-4 rounded-2xl font-bold hover:bg-brand-secondary transition-all shadow-xl shadow-brand-primary/10 flex items-center justify-center gap-3"
+            >
+              <Plus size={20} />
+              <span>Add Stock Item</span>
+            </button>
+          </div>
+
+          <div className="bg-white dark:bg-bg-sidebar/50 p-6 rounded-[32px] coffee-shadow border border-border-subtle">
+            <div className="relative">
+              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-brand-primary" size={24} />
+              <input 
+                type="text"
+                placeholder="Search inventory items..."
+                value={inventorySearch}
+                onChange={(e) => setInventorySearch(e.target.value)}
+                className="w-full pl-16 pr-6 py-4 bg-white/50 dark:bg-bg-sidebar shadow-inner rounded-2xl border-2 border-border-subtle focus:border-brand-primary focus:shadow-md outline-none transition-all font-bold text-lg"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredInventory.map((item) => {
+              const isLow = item.stockLevel <= item.lowStockThreshold;
+              const isCritical = item.stockLevel === 0;
+              return (
+                <motion.div 
+                  layout
+                  key={item.id}
+                  className={`bg-white dark:bg-bg-sidebar/50 p-8 rounded-[32px] coffee-shadow border transition-all ${
+                    isCritical 
+                      ? 'border-brand-danger bg-red-50 dark:bg-red-950/20 shadow-lg shadow-brand-danger/10' 
+                      : isLow 
+                        ? 'border-brand-danger/30 bg-orange-50/30' 
+                        : 'border-border-subtle'
+                  }`}
+                >
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-xl font-bold text-brand-primary">{item.name}</h3>
+                        {isLow && (
+                          <span className={`text-[10px] text-white px-2 py-0.5 rounded-lg font-black uppercase tracking-tight shadow-sm ${isCritical ? 'bg-brand-danger animate-pulse' : 'bg-brand-danger'}`}>
+                            {isCritical ? 'Depleted' : 'Low Stock'}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-text-muted font-bold">Last update: {new Date(item.updatedAt).toLocaleDateString()}</p>
+                    </div>
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isLow ? 'bg-brand-danger/10 text-brand-danger' : 'bg-brand-primary/5 text-brand-primary'}`}>
+                      <Package size={24} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-end">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-text-muted mb-1">Current Stock</p>
+                        <p className={`text-4xl font-serif font-black ${isLow ? 'text-brand-danger' : 'text-brand-primary'}`}>
+                          {item.stockLevel}
+                          <span className="text-sm font-sans font-bold ml-1 opacity-40 uppercase">{item.unit}</span>
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-text-muted mb-1">Threshold</p>
+                        <p className="font-bold text-brand-primary">{item.lowStockThreshold} {item.unit}</p>
+                      </div>
+                    </div>
+
+                    <div className="w-full bg-border-subtle/30 h-3 rounded-full overflow-hidden relative">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(100, (item.stockLevel / (item.lowStockThreshold * 3)) * 100)}%` }}
+                        className={`h-full transition-colors ${
+                          isCritical ? 'bg-brand-danger' : isLow ? 'bg-brand-danger/80' : 'bg-brand-secondary'
+                        }`}
+                      />
+                    </div>
+
+                    <div className="pt-4 flex gap-2">
+                      <button 
+                        onClick={() => {
+                          const amount = prompt(`Enter amount to add for ${item.name}:`, '10');
+                          if (amount && !isNaN(parseInt(amount))) {
+                            handleRestock(item.id, parseInt(amount));
+                          }
+                        }}
+                        className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
+                          isLow 
+                            ? 'bg-brand-danger text-white hover:bg-brand-primary shadow-lg shadow-brand-danger/20' 
+                            : 'bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white'
+                        }`}
+                      >
+                        <RefreshCw size={14} className={isLow ? 'animate-spin' : ''} />
+                        Restock
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+            
+            {filteredInventory.length === 0 && (
+              <div className="col-span-full py-20 text-center">
+                <div className="flex flex-col items-center gap-3 text-text-muted">
+                  <Search size={48} className="opacity-10" />
+                  <p className="font-bold text-lg">No inventory items found</p>
+                  <p className="text-sm">Try adjusting your search query.</p>
+                  {inventorySearch && (
+                    <button 
+                      onClick={() => setInventorySearch('')}
+                      className="mt-4 text-xs font-black uppercase tracking-widest text-brand-primary hover:underline"
+                    >
+                      Clear search
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      ) : activeTab === 'products' ? (
+        <section className="space-y-8">
+          <div className="flex justify-between items-center">
+            <div className="space-y-1">
+              <h2 className="text-3xl font-serif font-bold text-brand-primary">Product Inventory</h2>
+              <p className="text-text-muted">Manage your coffee masterpieces and snack offerings.</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col md:flex-row gap-4 bg-white dark:bg-bg-sidebar/50 p-6 rounded-[32px] coffee-shadow border border-border-subtle">
+            <div className="flex-1 relative">
+              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-brand-primary" size={24} />
+              <input 
+                type="text"
+                placeholder="Search by product name or description..."
+                value={productSearch}
+                onChange={(e) => setProductSearch(e.target.value)}
+                className="w-full pl-16 pr-6 py-4 bg-white/50 dark:bg-bg-sidebar shadow-inner rounded-2xl border-2 border-border-subtle focus:border-brand-primary focus:shadow-md outline-none transition-all font-bold text-lg"
+              />
+            </div>
+            <div className="relative">
+              <Package className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
+              <select 
+                value={productCategoryFilter}
+                onChange={(e) => setProductCategoryFilter(e.target.value)}
+                className="w-full md:w-64 pl-12 pr-10 py-3 bg-bg-sidebar rounded-2xl border border-border-subtle focus:border-brand-primary outline-none transition-all font-medium appearance-none"
+              >
+                <option value="all">All Categories ({allProducts.length})</option>
+                {categoryList.map(cat => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name} ({cat._count?.products || 0})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-bg-sidebar/50 rounded-[32px] coffee-shadow border border-border-subtle overflow-hidden transition-colors">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse font-sans">
+                <thead>
+                  <tr className="border-b border-border-subtle bg-bg-sidebar/10">
+                    <th className="px-10 py-6 text-left text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Product</th>
+                    <th className="px-10 py-6 text-left text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Category</th>
+                    <th className="px-10 py-6 text-left text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Details</th>
+                    <th className="px-10 py-6 text-left text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Price</th>
+                    <th className="px-10 py-6 text-right text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle/50">
+                  {filteredProducts.map((product) => (
+                    <ProductRow 
+                      key={product.id} 
+                      product={product} 
+                      categoryList={categoryList} 
+                      customizationGroups={customizations}
+                      inventory={inventory}
+                      onSuccess={fetchData} 
+                    />
+                  ))}
+                  {filteredProducts.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-10 py-20 text-center">
+                        <div className="flex flex-col items-center gap-3 text-text-muted">
+                          <Search size={48} className="opacity-10" />
+                          <p className="font-bold text-lg">No products found</p>
+                          <p className="text-sm">Try adjusting your search or category filter.</p>
+                          {(productSearch || productCategoryFilter !== 'all') && (
+                            <button 
+                              onClick={() => { setProductSearch(''); setProductCategoryFilter('all'); }}
+                              className="mt-4 text-xs font-black uppercase tracking-widest text-brand-primary hover:underline"
+                            >
+                              Clear all filters
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       ) : activeTab === 'categories' ? (
@@ -516,59 +827,16 @@ const AdminDashboard: React.FC = () => {
                   <th className="px-10 py-6 text-right text-[10px] font-black uppercase tracking-[0.2em] text-text-muted">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border-subtle/50">
-                {categoryList.map((cat) => (
-                  <motion.tr 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    key={cat.id} 
-                    className="hover:bg-bg-sidebar/30 transition-all group"
-                  >
-                    <td className="px-10 py-8">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-brand-primary/5 flex items-center justify-center text-brand-primary border border-brand-primary/10">
-                          <Package size={18} />
-                        </div>
-                        <span className="font-bold text-brand-primary text-lg">{cat.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-10 py-8">
-                      <span className="bg-bg-sidebar px-4 py-2 rounded-xl text-xs font-bold text-text-muted border border-border-subtle/50">
-                        {cat._count?.products || 0} Products
-                      </span>
-                    </td>
-                    <td className="px-10 py-8 text-right">
-                      <div className="flex justify-end gap-2 text-text-muted">
-                        <button 
-                          onClick={() => {
-                            setEditingCategory(cat);
-                            setIsCategoryModalOpen(true);
-                          }}
-                          className="p-2 hover:bg-bg-sidebar hover:text-brand-primary rounded-xl transition-all"
-                        >
-                          <Edit3 size={18} />
-                        </button>
-                        <button 
-                          onClick={() => {
-                            if(confirm(`Are you sure you want to delete "${cat.name}"?`)) {
-                              handleDeleteCategory(cat.id);
-                            }
-                          }}
-                          disabled={(cat._count?.products || 0) > 0}
-                          className={`p-2 rounded-xl transition-all ${
-                            (cat._count?.products || 0) > 0 
-                              ? 'opacity-20 cursor-not-allowed' 
-                              : 'hover:bg-red-50 hover:text-brand-danger'
-                          }`}
-                          title={(cat._count?.products || 0) > 0 ? "Cannot delete: Associated products exist" : "Delete Category"}
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
+                <tbody className="divide-y divide-border-subtle/50">
+                  {categoryList.map((cat) => (
+                    <CategoryRow 
+                      key={cat.id} 
+                      category={cat} 
+                      onSuccess={fetchData} 
+                      onDelete={handleDeleteCategory}
+                    />
+                  ))}
+                </tbody>
             </table>
           </div>
         </section>
@@ -638,25 +906,7 @@ const AdminDashboard: React.FC = () => {
                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-text-muted border-b border-border-subtle pb-2">Choices</p>
                    <div className="grid grid-cols-1 gap-2">
                       {group.choices.map((choice: any) => (
-                        <div key={choice.id} className="flex justify-between items-center bg-bg-sidebar/50 p-3 rounded-xl border border-border-subtle/30 group">
-                           <div className="flex items-center gap-3">
-                              <span className="font-bold text-sm text-brand-primary">{choice.name}</span>
-                              {choice.priceModifier !== 0 && (
-                                <span className="text-[10px] text-brand-secondary font-bold">
-                                  {choice.priceModifier > 0 ? '+' : ''}₱{choice.priceModifier.toFixed(0)}
-                                </span>
-                              )}
-                           </div>
-                           <button 
-                            onClick={async () => {
-                              await apiClient.delete(`/admin/customizations/choice/${choice.id}`);
-                              fetchData();
-                            }}
-                            className="p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 rounded-lg text-brand-danger"
-                          >
-                             <Trash2 size={14} />
-                           </button>
-                        </div>
+                        <ChoiceRow key={choice.id} choice={choice} onSuccess={fetchData} />
                       ))}
                       <NewChoiceButton groupId={group.id} onSuccess={fetchData} />
                    </div>
@@ -670,9 +920,6 @@ const AdminDashboard: React.FC = () => {
                            {p.product.name}
                         </span>
                       ))}
-                      <button className="w-8 h-8 rounded-lg border border-dashed border-border-subtle flex items-center justify-center text-text-muted hover:border-brand-primary hover:text-brand-primary transition-all">
-                        <Plus size={14} />
-                      </button>
                    </div>
                 </div>
               </motion.div>
@@ -776,32 +1023,30 @@ const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Bottom Sticky Alert (optional, but keep for extra visibility if user likes it) */}
-      {lowStockItems.length > 0 && (
-        <motion.div 
-          initial={{ opacity: 0, y: 50 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="fixed bottom-8 left-1/2 -translate-x-1/2 md:left-auto md:right-8 md:translate-x-0 bg-brand-danger text-white p-6 rounded-[32px] flex items-center gap-6 font-bold shadow-2xl z-50 border border-white/20"
-        >
-          <div className="p-2 bg-white/20 rounded-xl">
-             <AlertTriangle size={24} />
-          </div>
-          <div>
-            <p className="text-xs opacity-80 uppercase tracking-widest">Inventory Warning</p>
-            <p className="text-lg">Critical Stock: {lowStockItems.map(i => i.name).join(', ')}</p>
-          </div>
-        </motion.div>
-      )}
-
       {/* Create Product Modal */}
       <AnimatePresence>
         {isUserModalOpen && (
-          <CreateUserModal 
-            onClose={() => setIsUserModalOpen(false)} 
-            onSuccess={() => {
-              setIsUserModalOpen(false);
-              fetchData();
-            }}
+          <CreateUserModal
+            onClose={() => setIsUserModalOpen(false)}
+            onSuccess={fetchData}
+          />
+        )}
+        
+        {editingUser && (
+          <UserEditModal 
+            user={editingUser}
+            onClose={() => setEditingUser(null)}
+            onSuccess={fetchData}
+          />
+        )}
+
+        {userToDelete && (
+          <DeleteConfirmationModal
+            title="Remove Personnel?"
+            message={`Are you sure you want to delete ${userToDelete.name || userToDelete.email}? This action will permanently revoke their access.`}
+            onConfirm={handleConfirmDeleteUser}
+            onCancel={() => setUserToDelete(null)}
+            isLoading={isDeletingUser}
           />
         )}
       </AnimatePresence>
@@ -812,6 +1057,7 @@ const AdminDashboard: React.FC = () => {
             onClose={() => setIsCreateModalOpen(false)} 
             categories={categories}
             inventory={inventory}
+            customizationGroups={customizations}
             onSuccess={() => {
               setIsCreateModalOpen(false);
               fetchData();
@@ -859,6 +1105,90 @@ const AdminDashboard: React.FC = () => {
           />
         )}
       </AnimatePresence>
+    </div>
+  );
+};
+
+const ChoiceRow: React.FC<{ choice: any; onSuccess: () => void }> = ({ choice, onSuccess }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState({ name: choice.name, priceModifier: choice.priceModifier });
+  const [loading, setLoading] = useState(false);
+
+  const handleUpdate = async () => {
+    setLoading(true);
+    try {
+      await apiClient.put(`/admin/customizations/choice/${choice.id}`, editData);
+      setIsEditing(false);
+      onSuccess();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete ${choice.name}?`)) return;
+    setLoading(true);
+    try {
+      await apiClient.delete(`/admin/customizations/choice/${choice.id}`);
+      onSuccess();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <div className="flex items-center gap-2 p-2 bg-white border border-brand-primary/30 rounded-xl shadow-sm">
+        <input 
+          value={editData.name}
+          onChange={e => setEditData({...editData, name: e.target.value})}
+          className="flex-1 bg-transparent text-xs font-bold font-sans outline-none"
+        />
+        <div className="flex items-center gap-1">
+          <span className="text-[8px] font-black text-text-muted">₱</span>
+          <input 
+            type="number"
+            value={editData.priceModifier}
+            onChange={e => setEditData({...editData, priceModifier: Number(e.target.value)})}
+            className="w-12 bg-bg-sidebar rounded px-1 py-0.5 text-[10px] font-bold text-brand-secondary"
+          />
+        </div>
+        <button onClick={handleUpdate} disabled={loading} className="text-brand-primary p-1">
+          {loading ? <Coffee size={12} className="animate-spin" /> : <Check size={12} />}
+        </button>
+        <button onClick={() => setIsEditing(false)} className="text-text-muted p-1"><X size={12} /></button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex justify-between items-center bg-bg-sidebar/50 p-3 rounded-xl border border-border-subtle/30 group">
+      <div className="flex items-center gap-3">
+        <span className="font-bold text-sm text-brand-primary">{choice.name}</span>
+        {choice.priceModifier !== 0 && (
+          <span className="text-[10px] text-brand-secondary font-bold">
+            {choice.priceModifier > 0 ? '+' : ''}₱{Number(choice.priceModifier).toFixed(0)}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button 
+          onClick={() => setIsEditing(true)}
+          className="p-1.5 hover:bg-white rounded-lg text-text-muted hover:text-brand-primary"
+        >
+          <Edit3 size={14} />
+        </button>
+        <button 
+          onClick={handleDelete}
+          className="p-1.5 hover:bg-red-100 rounded-lg text-brand-danger"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
     </div>
   );
 };
@@ -944,46 +1274,33 @@ const CreateCustomizationModal: React.FC<{
         await apiClient.put(`/admin/customizations/group/${group.id}`, {
           name: formData.name,
           required: formData.required,
-          productIds: formData.productIds
+          productIds: formData.productIds,
+          choices: formData.choices
         });
-        
-        // Handle choices: this simple approach assumes we delete and re-add or just add new
-        // For editing, a more robust backend is needed, but I will delete existing and re-add for now if I can't update.
-        // Actually, let's just add new ones for now, assuming editing choices might require more backend work than I have access to.
-        // I will try to support adding new choices.
-        for (const choice of formData.choices) {
-          if (!choice.id) {
-            await apiClient.post('/admin/customizations/choice', {
-              groupId: group.id,
-              name: choice.name,
-              priceModifier: choice.priceModifier
-            });
-          }
-        }
       } else {
-        const groupResponse = await apiClient.post('/admin/customizations/group', {
+        await apiClient.post('/admin/customizations/group', {
           name: formData.name,
           required: formData.required,
-          productIds: formData.productIds
+          productIds: formData.productIds,
+          choices: formData.choices
         });
-        
-        const groupId = groupResponse.id;
-        
-        for (const choice of formData.choices) {
-          await apiClient.post('/admin/customizations/choice', {
-            groupId,
-            name: choice.name,
-            priceModifier: choice.priceModifier
-          });
-        }
       }
+      toast.success(group ? 'Variation group updated' : 'Variation group created');
       onSuccess();
-    } catch (err) {
+      onClose();
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to save group');
+      toast.error(err.message || 'Failed to save group');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const updateChoice = (idx: number, updates: Partial<{ name: string; priceModifier: number }>) => {
+    setFormData(prev => ({
+      ...prev,
+      choices: prev.choices.map((c, i) => i === idx ? { ...c, ...updates } : c)
+    }));
   };
 
   const addChoice = () => {
@@ -1065,31 +1382,68 @@ const CreateCustomizationModal: React.FC<{
                  <LinkIcon size={12} />
                  Choices
                </label>
-               <div className="bg-bg-sidebar rounded-2xl p-4 border border-border-subtle/50 h-56 overflow-y-auto space-y-2 custom-scrollbar">
-                  {formData.choices.map((choice, idx) => (
-                    <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-white border border-border-subtle">
-                      <span className="text-xs font-bold">{choice.name} (+₱{choice.priceModifier})</span>
-                      <button type="button" onClick={() => removeChoice(idx)} className="text-brand-danger hover:text-brand-secondary"><X size={14} /></button>
-                    </div>
-                  ))}
-                  <div className="flex gap-2">
-                    <input
-                      placeholder="Choice name"
-                      value={newChoice.name}
-                      onChange={e => setNewChoice({...newChoice, name: e.target.value})}
-                      className="flex-1 p-2 bg-white border border-border-subtle rounded-lg text-xs"
-                    />
-                    <input
-                      placeholder="Price"
-                      type="number"
-                      value={newChoice.priceModifier}
-                      onChange={e => setNewChoice({...newChoice, priceModifier: Number(e.target.value)})}
-                      className="w-16 p-2 bg-white border border-border-subtle rounded-lg text-xs"
-                    />
-                    <button type="button" onClick={addChoice} className="bg-brand-primary text-white rounded-lg px-2"><Plus size={14}/></button>
-                  </div>
-               </div>
-            </div>
+               <div className="bg-bg-sidebar rounded-2xl p-6 border border-border-subtle/50 space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar">
+                   <div className="space-y-3">
+                     {formData.choices.map((choice, idx) => (
+                       <div key={idx} className="flex gap-2 group/choice">
+                         <input
+                           placeholder="Choice"
+                           value={choice.name}
+                           onChange={e => updateChoice(idx, { name: e.target.value })}
+                           className="flex-1 p-3 bg-white border border-border-subtle rounded-xl text-xs font-bold focus:border-brand-primary outline-none transition-all shadow-sm"
+                         />
+                         <div className="relative w-24">
+                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-text-muted">₱</span>
+                           <input
+                             type="number"
+                             step="0.01"
+                             value={choice.priceModifier}
+                             onChange={e => updateChoice(idx, { priceModifier: Number(e.target.value) })}
+                             className="w-full pl-6 pr-3 py-3 bg-white border border-border-subtle rounded-xl text-xs font-bold text-brand-secondary focus:border-brand-primary outline-none transition-all shadow-sm"
+                           />
+                         </div>
+                         <button 
+                           type="button" 
+                           onClick={() => removeChoice(idx)} 
+                           className="p-3 text-brand-danger hover:bg-red-50 rounded-xl transition-all border border-transparent hover:border-brand-danger/20"
+                         >
+                           <Trash2 size={16} />
+                         </button>
+                       </div>
+                     ))}
+                   </div>
+
+                   <div className="pt-4 border-t border-dashed border-border-subtle">
+                     <p className="text-[10px] font-black uppercase tracking-widest text-text-muted mb-3 ml-1">New Choice Addition</p>
+                     <div className="flex gap-2 p-4 bg-brand-primary/5 rounded-[24px] border border-brand-primary/10">
+                       <input
+                         placeholder="Choice name (e.g. Soy Milk)"
+                         value={newChoice.name}
+                         onChange={e => setNewChoice({...newChoice, name: e.target.value})}
+                         className="flex-1 p-3 bg-white border border-border-subtle rounded-xl text-xs font-bold outline-none focus:border-brand-primary"
+                       />
+                       <div className="relative w-24">
+                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-brand-primary/60">₱</span>
+                         <input
+                           placeholder="0.00"
+                           type="number"
+                           step="0.01"
+                           value={newChoice.priceModifier}
+                           onChange={e => setNewChoice({...newChoice, priceModifier: Number(e.target.value)})}
+                           className="w-full pl-6 pr-3 py-3 bg-white border border-border-subtle rounded-xl text-xs font-bold text-brand-primary outline-none focus:border-brand-primary"
+                         />
+                       </div>
+                       <button 
+                         type="button" 
+                         onClick={addChoice} 
+                         className="bg-brand-primary text-white rounded-xl px-5 hover:bg-brand-secondary transition-all shadow-lg shadow-brand-primary/20"
+                       >
+                         <Plus size={20}/>
+                       </button>
+                     </div>
+                   </div>
+                </div>
+             </div>
 
             <div className="space-y-4">
                <label className="block text-xs font-black uppercase tracking-widest text-text-muted mb-2 ml-1 flex items-center gap-2">
@@ -1118,7 +1472,7 @@ const CreateCustomizationModal: React.FC<{
                 <Info size={20} />
              </div>
              <p className="text-xs text-brand-primary font-medium leading-relaxed">
-               Choices are added after the group is created. You can manage them directly from the variation card in the dashboard.
+               Manage variation options and their price modifiers here. Updates are saved collectively for the group.
              </p>
           </div>
 
@@ -1167,9 +1521,9 @@ const CreateInventoryModal: React.FC<{
         lowStockThreshold: Number(formData.lowStockThreshold)
       });
       onSuccess();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to create inventory item:', err);
-      alert('Failed to create inventory item.');
+      alert(err.message || 'Failed to create inventory item.');
     } finally {
       setSubmitting(false);
     }
@@ -1275,19 +1629,30 @@ const CreateProductModal: React.FC<{
   onClose: () => void; 
   categories: Category[]; 
   inventory: InventoryItem[];
+  customizationGroups: any[];
   onSuccess: () => void;
-}> = ({ onClose, categories, inventory, onSuccess }) => {
+}> = ({ onClose, categories, inventory, customizationGroups, onSuccess }) => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     price: '',
     imageUrl: '',
     categoryId: categories[0]?.id || '',
-    ingredients: [] as { inventoryItemId: string; quantityNeeded: number }[]
+    ingredients: [] as { inventoryItemId: string; quantityNeeded: number }[],
+    customizationGroupIds: [] as string[]
   });
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const toggleCustomizationGroup = (groupId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      customizationGroupIds: prev.customizationGroupIds.includes(groupId)
+        ? prev.customizationGroupIds.filter(id => id !== groupId)
+        : [...prev.customizationGroupIds, groupId]
+    }));
+  };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1503,27 +1868,35 @@ const CreateProductModal: React.FC<{
             </div>
             <div className="space-y-3">
               {formData.ingredients.map((ing, idx) => (
-                <div key={idx} className="flex gap-3 items-center bg-bg-sidebar p-3 rounded-2xl border border-border-subtle/50">
-                  <select 
+                <div key={idx} className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-bg-sidebar p-3 overflow-visible rounded-2xl border border-border-subtle/50">
+                  <SearchableSelect
+                    options={inventory.map(item => ({ value: item.id, label: `${item.name} (${item.unit})` }))}
                     value={ing.inventoryItemId}
-                    onChange={e => updateIngredient(idx, 'inventoryItemId', e.target.value)}
-                    className="flex-1 bg-transparent outline-none font-bold text-sm"
-                  >
-                    {inventory.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-                  </select>
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="number"
-                      step="0.1"
-                      value={ing.quantityNeeded}
-                      onChange={e => updateIngredient(idx, 'quantityNeeded', Number(e.target.value))}
-                      className="w-16 bg-white border border-border-subtle rounded-lg px-2 py-1 text-center font-bold text-xs"
-                    />
-                    <span className="text-[10px] font-bold text-text-muted uppercase">Qty</span>
+                    onChange={(val) => updateIngredient(idx, 'inventoryItemId', val)}
+                    className="flex-1 w-full sm:w-auto font-bold text-sm"
+                  />
+                  <div className="flex items-center gap-2 self-end sm:self-auto w-full sm:w-auto justify-between sm:justify-start">
+                    <div className="flex items-center gap-2">
+                       <input 
+                         type="number"
+                         step="0.01"
+                         min="0.01"
+                         value={ing.quantityNeeded || ''}
+                         onChange={e => {
+                           const val = isNaN(parseFloat(e.target.value)) ? 0 : parseFloat(e.target.value);
+                           updateIngredient(idx, 'quantityNeeded', val);
+                         }}
+                         className={`w-20 bg-white border ${ing.quantityNeeded <= 0 ? 'border-brand-danger bg-red-50' : 'border-border-subtle'} rounded-lg px-2 py-1.5 text-center font-bold text-sm outline-none focus:border-brand-primary transition-colors`}
+                         placeholder="Qty"
+                       />
+                       <span className="text-[10px] font-bold text-text-muted uppercase">
+                         {inventory.find(inv => inv.id === ing.inventoryItemId)?.unit || 'Qty'}
+                       </span>
+                    </div>
+                    <button type="button" onClick={() => removeIngredient(idx)} className="text-brand-danger p-1 hover:bg-white rounded-lg transition-colors ml-2">
+                      <X size={18} />
+                    </button>
                   </div>
-                  <button type="button" onClick={() => removeIngredient(idx)} className="text-brand-danger p-1 hover:bg-white rounded-lg transition-colors">
-                    <X size={16} />
-                  </button>
                 </div>
               ))}
               {formData.ingredients.length === 0 && (
@@ -1531,6 +1904,29 @@ const CreateProductModal: React.FC<{
                   <p className="text-xs font-medium">No ingredients assigned yet.</p>
                 </div>
               )}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <label className="block text-xs font-black uppercase tracking-widest text-text-muted ml-1">Customization Variations</label>
+            <div className="flex flex-wrap gap-2">
+               {customizationGroups.map(group => (
+                 <button
+                   key={group.id}
+                   type="button"
+                   onClick={() => toggleCustomizationGroup(group.id)}
+                   className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+                     formData.customizationGroupIds.includes(group.id)
+                       ? 'bg-brand-primary text-white border-brand-primary'
+                       : 'bg-white text-text-muted border-border-subtle hover:border-brand-primary'
+                   }`}
+                 >
+                   {group.name}
+                 </button>
+               ))}
+               {customizationGroups.length === 0 && (
+                 <p className="text-[10px] text-text-muted italic">No variation groups defined yet.</p>
+               )}
             </div>
           </div>
         </form>
@@ -1556,6 +1952,490 @@ const CreateProductModal: React.FC<{
         </div>
       </motion.div>
     </motion.div>
+  );
+};
+
+const CategoryRow: React.FC<{ 
+  category: any; 
+  onSuccess: () => void;
+  onDelete: (id: string) => void;
+}> = ({ category, onSuccess, onDelete }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [name, setName] = useState(category.name);
+  const [loading, setLoading] = useState(false);
+
+  const handleUpdate = async () => {
+    if (!name || name === category.name) {
+      setIsEditing(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      await apiClient.put(`/menu/categories/${category.id}`, { name });
+      setIsEditing(false);
+      onSuccess();
+    } catch (err) {
+      console.error('Update category failed:', err);
+      alert('Failed to update category');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <tr className="bg-brand-primary/5">
+        <td className="px-10 py-8">
+           <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-brand-primary border border-border-subtle">
+                <Package size={18} />
+              </div>
+              <input 
+                autoFocus
+                value={name}
+                onChange={e => setName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleUpdate()}
+                className="font-bold text-brand-primary text-lg bg-white border border-border-subtle rounded-lg px-3 py-1 outline-none focus:border-brand-primary"
+              />
+           </div>
+        </td>
+        <td className="px-10 py-8">
+           <span className="text-xs text-text-muted opacity-50 italic">Saving name changes...</span>
+        </td>
+        <td className="px-10 py-8 text-right">
+          <div className="flex justify-end gap-2">
+            <button 
+              onClick={handleUpdate}
+              disabled={loading}
+              className="p-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-all"
+            >
+              {loading ? <Coffee size={18} className="animate-spin" /> : <Check size={18} />}
+            </button>
+            <button 
+              onClick={() => { setIsEditing(false); setName(category.name); }}
+              className="p-2 bg-bg-sidebar text-text-muted rounded-lg hover:bg-white transition-all"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <motion.tr 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="hover:bg-bg-sidebar/30 transition-all group"
+    >
+      <td className="px-10 py-8">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-brand-primary/5 flex items-center justify-center text-brand-primary border border-brand-primary/10">
+            <Package size={18} />
+          </div>
+          <span className="font-bold text-brand-primary text-lg">{category.name}</span>
+        </div>
+      </td>
+      <td className="px-10 py-8">
+        <span className="bg-bg-sidebar px-4 py-2 rounded-xl text-xs font-bold text-text-muted border border-border-subtle/50">
+          {category._count?.products || 0} Products
+        </span>
+      </td>
+      <td className="px-10 py-8 text-right">
+        <div className="flex justify-end gap-2 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity">
+          <button 
+            onClick={() => setIsEditing(true)}
+            className="p-2 hover:bg-bg-sidebar hover:text-brand-primary rounded-xl transition-all"
+          >
+            <Edit3 size={18} />
+          </button>
+          <button 
+            onClick={() => onDelete(category.id)}
+            disabled={(category._count?.products || 0) > 0}
+            className={`p-2 rounded-xl transition-all ${
+              (category._count?.products || 0) > 0 
+                ? 'opacity-20 cursor-not-allowed' 
+                : 'hover:bg-red-50 hover:text-brand-danger'
+            }`}
+            title={(category._count?.products || 0) > 0 ? "Cannot delete: Associated products exist" : "Delete Category"}
+          >
+            <Trash2 size={18} />
+          </button>
+        </div>
+      </td>
+    </motion.tr>
+  );
+};
+
+const ProductRow: React.FC<{ 
+  product: Product & { customizations?: any[]; ingredients?: any[] }; 
+  categoryList: any[]; 
+  customizationGroups: any[];
+  inventory: InventoryItem[];
+  onSuccess: () => void 
+}> = ({ product, categoryList, customizationGroups, inventory, onSuccess }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [editData, setEditData] = useState({
+    name: product.name,
+    description: product.description || '',
+    price: product.price.toString(),
+    categoryId: product.categoryId,
+    imageUrl: product.imageUrl || '',
+    customizationGroupIds: product.customizations?.map(c => c.groupId) || [] as string[],
+    ingredients: product.ingredients?.map(i => ({
+      inventoryItemId: i.inventoryItemId,
+      quantityNeeded: i.quantityNeeded
+    })) || [] as { inventoryItemId: string; quantityNeeded: number }[]
+  });
+
+  const addIngredient = () => {
+    if (inventory.length === 0) return;
+    setEditData(prev => ({
+      ...prev,
+      ingredients: [...prev.ingredients, { inventoryItemId: inventory[0].id, quantityNeeded: 1 }]
+    }));
+  };
+
+  const removeIngredient = (idx: number) => {
+    setEditData(prev => ({
+      ...prev,
+      ingredients: prev.ingredients.filter((_, i) => i !== idx)
+    }));
+  };
+
+  const updateIngredient = (idx: number, field: string, value: any) => {
+    setEditData(prev => ({
+      ...prev,
+      ingredients: prev.ingredients.map((ing, i) => i === idx ? { ...ing, [field]: value } : ing)
+    }));
+  };
+
+  const handleUpdate = async () => {
+    setLoading(true);
+    try {
+      await apiClient.put(`/menu/${product.id}`, {
+        ...editData,
+        price: Number(editData.price)
+      });
+      setIsEditing(false);
+      onSuccess();
+    } catch (err) {
+      console.error('Update failed:', err);
+      alert('Failed to update product');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleVisibility = async () => {
+    setLoading(true);
+    try {
+      await apiClient.put(`/menu/${product.id}`, {
+        ...editData,
+        price: Number(editData.price),
+        isVisible: !product.isVisible
+      });
+      onSuccess();
+    } catch (err) {
+      console.error('Toggle visibility failed:', err);
+      alert('Failed to update product visibility');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleCustomizationGroup = (groupId: string) => {
+    setEditData(prev => ({
+      ...prev,
+      customizationGroupIds: prev.customizationGroupIds.includes(groupId)
+        ? prev.customizationGroupIds.filter(id => id !== groupId)
+        : [...prev.customizationGroupIds, groupId]
+    }));
+  };
+
+  const handleDelete = async () => {
+    if (!confirm(`Are you sure you want to delete ${product.name}?`)) return;
+    setLoading(true);
+    try {
+      await apiClient.delete(`/menu/${product.id}`);
+      onSuccess();
+    } catch (err) {
+      console.error('Delete failed:', err);
+      alert('Failed to delete product');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <tr className="bg-brand-primary/5">
+        <td className="px-10 py-6">
+          <div className="flex items-center gap-4">
+             <div className="w-12 h-12 rounded-xl border border-border-subtle overflow-hidden flex-shrink-0 bg-white">
+                {editData.imageUrl ? (
+                   <img src={editData.imageUrl} className="w-full h-full object-cover" />
+                ) : (
+                   <div className="w-full h-full flex items-center justify-center text-text-muted"><ImagePlus size={20} /></div>
+                )}
+             </div>
+             <div className="space-y-2 flex-1">
+                <input 
+                  value={editData.name}
+                  onChange={e => setEditData({...editData, name: e.target.value})}
+                  className="w-full p-2 bg-white border border-border-subtle rounded-lg text-sm font-bold outline-none focus:border-brand-primary"
+                  placeholder="Name"
+                />
+                <input 
+                  value={editData.description}
+                  onChange={e => setEditData({...editData, description: e.target.value})}
+                  className="w-full p-2 bg-white border border-border-subtle rounded-lg text-xs outline-none focus:border-brand-primary"
+                  placeholder="Description"
+                />
+                <input 
+                  value={editData.imageUrl}
+                  onChange={e => setEditData({...editData, imageUrl: e.target.value})}
+                  className="w-full p-2 bg-white border border-border-subtle rounded-lg text-[10px] italic outline-none focus:border-brand-primary"
+                  placeholder="Image URL"
+                />
+             </div>
+          </div>
+        </td>
+        <td className="px-10 py-6">
+          <select 
+            value={editData.categoryId}
+            onChange={e => setEditData({...editData, categoryId: e.target.value})}
+            className="p-2 bg-white border border-border-subtle rounded-lg text-xs font-bold outline-none"
+          >
+            {categoryList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </td>
+        <td className="px-10 py-6">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="block text-[8px] font-black uppercase tracking-widest text-text-muted">Variations</label>
+              <div className="flex flex-wrap gap-1 max-w-[200px]">
+                {customizationGroups.map(group => (
+                  <button
+                    key={group.id}
+                    type="button"
+                    onClick={() => toggleCustomizationGroup(group.id)}
+                    className={`px-2 py-1 rounded-md text-[9px] font-bold border transition-all ${
+                      editData.customizationGroupIds.includes(group.id)
+                        ? 'bg-brand-primary text-white border-brand-primary'
+                        : 'bg-white text-text-muted border-border-subtle hover:border-brand-primary'
+                    }`}
+                  >
+                    {group.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between items-center max-w-xs">
+                <label className="block text-[8px] font-black uppercase tracking-widest text-text-muted">Ingredients</label>
+                <button 
+                  type="button" 
+                  onClick={addIngredient}
+                  className="text-[8px] font-bold text-brand-primary hover:text-brand-secondary flex items-center gap-0.5"
+                >
+                  <Plus size={10} /> Add
+                </button>
+              </div>
+              <div className="space-y-2 min-w-[240px]">
+                {editData.ingredients.map((ing, idx) => (
+                  <div key={idx} className="flex gap-2 items-center bg-white p-2 rounded-lg border border-border-subtle/50 shadow-sm relative z-10">
+                    <SearchableSelect
+                      options={inventory.map(item => ({ value: item.id, label: `${item.name} (${item.unit})` }))}
+                      value={ing.inventoryItemId}
+                      onChange={(val) => updateIngredient(idx, 'inventoryItemId', val)}
+                      className="flex-1 min-w-[120px] text-[10px] font-bold"
+                    />
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <input 
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        value={ing.quantityNeeded || ''}
+                        onChange={e => {
+                          const val = isNaN(parseFloat(e.target.value)) ? 0 : parseFloat(e.target.value);
+                          updateIngredient(idx, 'quantityNeeded', val);
+                        }}
+                        className={`w-12 bg-bg-sidebar ${ing.quantityNeeded <= 0 ? 'border-brand-danger bg-red-50' : 'border-transparent'} border rounded px-1.5 py-1 text-center text-[10px] font-bold outline-none focus:border-brand-primary transition-colors`}
+                        placeholder="Qty"
+                      />
+                      <button type="button" onClick={() => removeIngredient(idx)} className="text-brand-danger p-1 hover:bg-red-50 rounded transition-colors">
+                        <X size={12} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {editData.ingredients.length === 0 && (
+                  <div className="text-[10px] italic text-text-muted text-center py-2 bg-bg-sidebar/50 border border-dashed border-border-subtle rounded-lg">
+                    No ingredients added
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </td>
+        <td className="px-10 py-6">
+          <input 
+            type="number"
+            value={editData.price}
+            onChange={e => setEditData({...editData, price: e.target.value})}
+            className="w-24 p-2 bg-white border border-border-subtle rounded-lg text-sm font-bold outline-none"
+          />
+        </td>
+        <td className="px-10 py-6 text-right">
+          <div className="flex justify-end gap-2">
+            <button 
+              onClick={handleUpdate}
+              disabled={loading}
+              className="p-2 bg-brand-primary text-white rounded-lg hover:bg-brand-secondary transition-all"
+            >
+              {loading ? <Coffee size={18} className="animate-spin" /> : <Check size={18} />}
+            </button>
+            <button 
+              onClick={() => setIsEditing(false)}
+              className="p-2 bg-bg-sidebar text-text-muted rounded-lg hover:bg-white transition-all"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <>
+      <tr className={`hover:bg-bg-sidebar/30 transition-all group ${isExpanded ? 'bg-bg-sidebar/10' : ''}`}>
+        <td className="px-10 py-6">
+          <div className="flex items-center gap-4">
+             <div className="w-12 h-12 rounded-xl border border-border-subtle overflow-hidden flex-shrink-0">
+                <img src={product.imageUrl || ''} alt={product.name} className="w-full h-full object-cover" />
+             </div>
+             <div>
+                <div className="flex items-center gap-2">
+                  <p className={`font-bold ${product.isVisible ? 'text-brand-primary' : 'text-text-muted line-through'}`}>{product.name}</p>
+                  {!product.isVisible && (
+                    <span className="text-[10px] bg-brand-warning/10 text-brand-warning px-2 py-0.5 rounded-md font-bold uppercase tracking-widest flex items-center gap-1">
+                      <EyeOff size={10} /> Hidden
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-text-muted line-clamp-1 max-w-[200px]">{product.description}</p>
+             </div>
+          </div>
+        </td>
+        <td className="px-10 py-6">
+          <span className="bg-bg-sidebar px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-text-muted border border-border-subtle/50">
+            {categoryList.find(c => c.id === product.categoryId)?.name || 'Unknown'}
+          </span>
+        </td>
+        <td className="px-10 py-6">
+          <div className="space-y-3">
+            {product.customizations && product.customizations.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {product.customizations.map((c: any) => {
+                  const group = customizationGroups.find(g => g.id === c.groupId);
+                  return (
+                    <span key={c.groupId} className="px-2 py-0.5 rounded-md bg-brand-primary/10 text-brand-primary text-[9px] font-bold">
+                      {group?.name || 'Variation'}
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+            {product.ingredients && product.ingredients.length > 0 && (
+              <span className="block text-[10px] font-medium text-text-muted mt-1 uppercase tracking-widest">
+                {product.ingredients.length} Ingredient{product.ingredients.length !== 1 ? 's' : ''}
+              </span>
+            )}
+            {(!product.customizations || product.customizations.length === 0) && (!product.ingredients || product.ingredients.length === 0) && (
+              <span className="text-[10px] text-text-muted italic">No details</span>
+            )}
+          </div>
+        </td>
+        <td className="px-10 py-6">
+          <span className="font-bold text-brand-primary">₱{Number(product.price).toFixed(2)}</span>
+        </td>
+        <td className="px-10 py-6 text-right">
+          <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button 
+              onClick={() => setIsExpanded(!isExpanded)}
+              className={`p-2 rounded-xl transition-all ${isExpanded ? 'bg-brand-primary text-white' : 'text-text-muted hover:text-brand-primary hover:bg-bg-sidebar'}`}
+              title="View Ingredients"
+            >
+              {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </button>
+            <button 
+              onClick={handleToggleVisibility}
+              disabled={loading}
+              className={`p-2 rounded-xl transition-all ${
+                product.isVisible 
+                  ? 'text-text-muted hover:text-brand-primary hover:bg-bg-sidebar' 
+                  : 'text-brand-warning bg-brand-warning/10 hover:bg-brand-warning hover:text-white'
+              }`}
+              title={product.isVisible ? "Hide Product" : "Show Product"}
+            >
+              {loading ? <Coffee size={18} className="animate-spin" /> : product.isVisible ? <Eye size={18} /> : <EyeOff size={18} />}
+            </button>
+            <button 
+              onClick={() => setIsEditing(true)}
+              className="p-2 text-text-muted hover:text-brand-primary hover:bg-bg-sidebar rounded-xl transition-all"
+            >
+              <Edit3 size={18} />
+            </button>
+            <button 
+              onClick={handleDelete}
+              disabled={loading}
+              className="p-2 text-text-muted hover:text-brand-danger hover:bg-red-50 rounded-xl transition-all"
+            >
+              {loading ? <Coffee size={18} className="animate-spin" /> : <Trash2 size={18} />}
+            </button>
+          </div>
+        </td>
+      </tr>
+      {isExpanded && (
+        <tr>
+          <td colSpan={5} className="px-10 py-8 bg-bg-sidebar/5 border-b border-border-subtle">
+            <div className="max-w-4xl mx-auto">
+              <h4 className="text-xs font-black uppercase tracking-widest text-text-muted mb-4 flex items-center gap-2">
+                <Package size={14} /> Recipe Ingredients
+              </h4>
+              {product.ingredients && product.ingredients.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {product.ingredients.map((ing: any) => {
+                    const item = inventory.find(i => i.id === ing.inventoryItemId);
+                    return (
+                      <div key={ing.id} className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-border-subtle shadow-sm hover:shadow-md transition-shadow">
+                        <div className="w-12 h-12 rounded-xl bg-brand-primary/5 flex items-center justify-center text-brand-primary">
+                          <Package size={20} />
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm text-brand-primary">{item?.name || 'Unknown Item'}</p>
+                          <p className="text-xs font-bold text-text-muted">{ing.quantityNeeded} {item?.unit || 'units'}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="bg-white p-6 rounded-2xl border border-border-subtle text-center">
+                  <p className="text-sm text-text-muted italic">No ingredients linked to this product.</p>
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 };
 

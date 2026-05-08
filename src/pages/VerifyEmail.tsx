@@ -10,6 +10,7 @@ const VerifyEmail: React.FC = () => {
   const [message, setMessage] = useState('');
   const navigate = useNavigate();
   const token = searchParams.get('token');
+  const email = searchParams.get('email');
 
   const [resendEmail, setResendEmail] = useState('');
   const [resending, setResending] = useState(false);
@@ -40,7 +41,7 @@ const VerifyEmail: React.FC = () => {
       }
 
       try {
-        const response = await apiClient.get(`/auth/verify-email?token=${token}`);
+        const response = await apiClient.get(`/auth/verify-email?token=${token}&email=${email}`);
         setStatus('success');
         setMessage(response.message || 'Email verified successfully!');
       } catch (error: any) {

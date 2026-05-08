@@ -23,13 +23,23 @@ const StaffDashboard: React.FC = () => {
 
     fetchOrders();
 
+    console.log('[Socket] Connecting to server...');
     const socket = io('/', {
-      auth: { token }
+      auth: { token },
+      transports: ['websocket', 'polling']
     });
 
-    socket.emit('join-staff');
+    socket.on('connect', () => {
+      console.log('[Socket] Connected to server');
+      socket.emit('join-staff');
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('[Socket] Connection error:', err);
+    });
 
     socket.on('new-order', (newOrder: Order) => {
+      console.log('[Socket] Received new-order:', newOrder.id);
       setOrders(prev => [newOrder, ...prev]);
       setNotification(newOrder);
       playNotificationSound();
@@ -41,6 +51,7 @@ const StaffDashboard: React.FC = () => {
     });
 
     socket.on('order-updated', (updatedOrder: Order) => {
+      console.log('[Socket] Received order-updated:', updatedOrder.id, updatedOrder.status);
       setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
     });
 
@@ -132,9 +143,9 @@ const StaffDashboard: React.FC = () => {
                         </p>
                         {item.customization && Object.keys(item.customization as object).length > 0 && (
                           <div className="flex flex-wrap gap-2 mt-1 px-1">
-                            {Object.entries(item.customization as Record<string, string>).map(([k, v]) => (
+                            {Object.entries(item.customization as Record<string, string | string[]>).map(([k, v]) => (
                               <span key={k} className="text-[10px] bg-brand-secondary/10 text-brand-secondary px-2 py-0.5 rounded-lg font-bold uppercase tracking-wider">
-                                {v}
+                                {Array.isArray(v) ? v.join(', ') : v}
                               </span>
                             ))}
                           </div>

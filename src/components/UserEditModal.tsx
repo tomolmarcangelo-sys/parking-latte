@@ -1,39 +1,42 @@
 import React, { useState } from 'react';
+import { User, Role } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, UserPlus, Mail, Lock, User as UserIcon, Shield, Plus } from 'lucide-react';
+import { X, User as UserIcon, Mail, Shield, Save } from 'lucide-react';
 import { apiClient } from '../lib/api';
 import { toast } from 'react-hot-toast';
 
-interface Props {
+interface UserEditModalProps {
+  user: User;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export const CreateUserModal: React.FC<Props> = ({ onClose, onSuccess }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [role, setRole] = useState('CUSTOMER');
+export const UserEditModal: React.FC<UserEditModalProps> = ({ user: initialUser, onClose, onSuccess }) => {
+  const [formData, setFormData] = useState({
+    name: initialUser.name || '',
+    email: initialUser.email,
+    role: initialUser.role as Role
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await apiClient.post('/users', { email, password, name, role });
-      toast.success('User created successfully');
+      await apiClient.put(`/users/${initialUser.id}`, formData);
+      toast.success('User updated successfully');
       onSuccess();
       onClose();
-    } catch (err: any) {
-      console.error('Failed to create user:', err);
-      toast.error(err.response?.data?.error || 'Failed to create user');
+    } catch (error: any) {
+      console.error('Failed to update user:', error);
+      toast.error(error.message || 'Failed to update user');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <motion.div 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -51,9 +54,9 @@ export const CreateUserModal: React.FC<Props> = ({ onClose, onSuccess }) => {
         <div className="p-8 border-b border-border-subtle flex justify-between items-center bg-bg-sidebar/30">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-brand-primary/10 rounded-xl flex items-center justify-center text-brand-primary">
-              <UserPlus size={20} />
+              <UserIcon size={20} />
             </div>
-            <h2 className="text-xl font-bold text-brand-primary">Enlist New Personnel</h2>
+            <h2 className="text-xl font-bold text-brand-primary">Edit User Identity</h2>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-border-subtle rounded-xl transition-colors">
             <X size={20} />
@@ -67,10 +70,10 @@ export const CreateUserModal: React.FC<Props> = ({ onClose, onSuccess }) => {
               <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
               <input 
                 type="text"
-                placeholder="Full Name"
-                value={name}
-                onChange={e => setName(e.target.value)}
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                 className="w-full pl-12 pr-4 py-3 bg-bg-sidebar border border-border-subtle rounded-2xl focus:border-brand-primary outline-none transition-all font-medium"
+                required
               />
             </div>
           </div>
@@ -81,9 +84,8 @@ export const CreateUserModal: React.FC<Props> = ({ onClose, onSuccess }) => {
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
               <input 
                 type="email"
-                placeholder="email@example.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
+                value={formData.email}
+                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                 className="w-full pl-12 pr-4 py-3 bg-bg-sidebar border border-border-subtle rounded-2xl focus:border-brand-primary outline-none transition-all font-medium"
                 required
               />
@@ -91,27 +93,12 @@ export const CreateUserModal: React.FC<Props> = ({ onClose, onSuccess }) => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">Temporary Password</label>
-            <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
-              <input 
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 bg-bg-sidebar border border-border-subtle rounded-2xl focus:border-brand-primary outline-none transition-all font-medium"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">Assign Role</label>
+            <label className="text-[10px] font-black uppercase tracking-widest text-text-muted ml-1">Access Role</label>
             <div className="relative">
               <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
               <select 
-                value={role}
-                onChange={e => setRole(e.target.value)}
+                value={formData.role}
+                onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as Role }))}
                 className="w-full pl-12 pr-10 py-3 bg-bg-sidebar border border-border-subtle rounded-2xl focus:border-brand-primary outline-none transition-all font-medium appearance-none"
               >
                 <option value="CUSTOMER">Customer Account</option>
@@ -139,9 +126,9 @@ export const CreateUserModal: React.FC<Props> = ({ onClose, onSuccess }) => {
             {isSubmitting ? (
               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
             ) : (
-              <Plus size={18} />
+              <Save size={18} />
             )}
-            <span>Create User</span>
+            <span>Save Changes</span>
           </button>
         </div>
       </motion.div>

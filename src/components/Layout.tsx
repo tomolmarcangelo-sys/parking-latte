@@ -6,11 +6,13 @@ import { useTheme } from '../context/ThemeContext';
 import { useCart } from '../context/CartContext';
 import { motion, AnimatePresence } from 'motion/react';
 import Footer from './Footer';
+import toast from 'react-hot-toast';
+import { apiClient } from '../lib/api';
 
 const Layout: React.FC = () => {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { cart, total, calculateItemPrice } = useCart();
+  const { cart, total, calculateItemPrice, clearCart } = useCart();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -31,14 +33,45 @@ const Layout: React.FC = () => {
 
   const cartCount = cart.reduce((acc, i) => acc + i.quantity, 0);
 
+  const handleCheckout = async () => {
+    if (!user) {
+      navigate('/login');
+      setIsCartOpen(false);
+      return;
+    }
+
+    try {
+      await apiClient.post('/orders', {
+        items: cart.map(item => ({
+          id: item.id,
+          quantity: item.quantity,
+          customization: item.customization,
+          price: calculateItemPrice(item)
+        })),
+        totalAmount: total
+      });
+      
+      clearCart();
+      setIsCartOpen(false);
+      toast.success('Order placed successfully! We\'re brewing it now.', {
+        duration: 5000,
+        icon: '☕',
+      });
+      navigate('/orders');
+    } catch (err) {
+      console.error('Checkout failed:', err);
+      toast.error('Failed to place order. Please check your connection.');
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-bg-base transition-colors duration-300">
       {/* Sticky Top Navbar */}
       <nav 
-        className={`fixed top-0 w-full z-[80] transition-all duration-500 px-6 md:px-12 py-4 flex justify-between items-center ${
+        className={`sticky top-0 w-full z-[80] transition-all duration-500 px-6 md:px-12 py-4 flex justify-between items-center ${
           isScrolled 
             ? 'bg-bg-base/80 backdrop-blur-xl border-b border-border-subtle/50 py-3 shadow-xl shadow-brand-primary/5' 
-            : 'bg-transparent'
+            : 'bg-bg-base border-b border-border-subtle/30'
         }`}
       >
         <div className="flex items-center gap-12">
@@ -107,7 +140,11 @@ const Layout: React.FC = () => {
                  <span className="text-sm font-bold text-brand-primary truncate max-w-[120px]">{user.name || user.email}</span>
                </button>
                <button 
-                onClick={() => { logout(); navigate('/login'); }}
+                onClick={() => { 
+                  logout(); 
+                  navigate('/login'); 
+                  toast.success('Signed out successfully');
+                }}
                 className="p-2.5 text-text-muted hover:text-brand-danger hover:bg-red-50 rounded-xl transition-all"
                 title="Logout"
                >
@@ -157,7 +194,11 @@ const Layout: React.FC = () => {
               <div className="pt-6 border-t border-border-subtle mt-12 flex flex-col gap-4">
                 {user ? (
                    <button 
-                    onClick={() => { logout(); navigate('/login'); }}
+                    onClick={() => { 
+                      logout(); 
+                      navigate('/login'); 
+                      toast.success('Signed out successfully');
+                    }}
                     className="w-full flex items-center gap-4 p-5 bg-red-50 text-brand-danger rounded-[24px] font-bold"
                    >
                      <LogOut size={22} />
@@ -178,7 +219,7 @@ const Layout: React.FC = () => {
       </AnimatePresence>
 
       {/* Main Content Area */}
-      <main className="flex-1 pt-24 min-h-screen px-4 md:px-12 lg:px-20 transition-all duration-500">
+      <main className="flex-1 min-h-screen px-4 md:px-12 lg:px-20 transition-all duration-500">
         <div className="max-w-7xl mx-auto">
           <Outlet />
         </div>
@@ -255,7 +296,7 @@ const Layout: React.FC = () => {
                             <div className="flex flex-wrap gap-1.5 pt-1">
                               {Object.entries(item.customization).map(([k, v]) => (
                                 <span key={k} className="text-[9px] bg-brand-secondary/10 px-2 py-0.5 rounded-full text-brand-secondary font-black uppercase tracking-tighter">
-                                  {v}
+                                  {Array.isArray(v) ? v.join(', ') : v as string}
                                 </span>
                               ))}
                             </div>
@@ -270,23 +311,20 @@ const Layout: React.FC = () => {
                 </div>
               )}
 
-              <div className="mt-8 pt-8 border-t-2 border-dashed border-border-subtle space-y-6">
-                <div className="flex justify-between items-center">
-                   <p className="text-sm font-black uppercase tracking-[0.2em] text-text-muted">Investment</p>
-                   <p className="text-4xl font-serif font-bold text-brand-primary">₱{total.toFixed(2)}</p>
-                </div>
-                <button 
-                  disabled={cart.length === 0}
-                  onClick={() => {
-                    navigate('/orders');
-                    setIsCartOpen(false);
-                  }}
-                  className="w-full bg-brand-primary text-white py-6 rounded-[24px] font-bold disabled:opacity-50 hover:bg-brand-secondary transition-all shadow-2xl shadow-brand-primary/20 flex items-center justify-center gap-3"
-                >
-                  <ShoppingCart size={20} />
-                  <span>Begin Pouring Order</span>
-                </button>
-              </div>
+          <div className="mt-8 pt-8 border-t-2 border-dashed border-border-subtle space-y-6">
+            <div className="flex justify-between items-center">
+               <p className="text-sm font-black uppercase tracking-[0.2em] text-text-muted">Investment</p>
+               <p className="text-4xl font-serif font-bold text-brand-primary">₱{total.toFixed(2)}</p>
+            </div>
+            <button 
+              disabled={cart.length === 0}
+              onClick={handleCheckout}
+              className="w-full bg-brand-primary text-white py-6 rounded-[24px] font-bold disabled:opacity-50 hover:bg-brand-secondary transition-all shadow-2xl shadow-brand-primary/20 flex items-center justify-center gap-3"
+            >
+              <ShoppingCart size={20} />
+              <span>Begin Pouring Order</span>
+            </button>
+          </div>
             </motion.div>
           </>
         )}

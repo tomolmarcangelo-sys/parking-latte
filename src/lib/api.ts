@@ -2,17 +2,25 @@ const BASE_URL = '/api';
 
 const handleResponse = async (res: Response) => {
   const text = await res.text();
-  console.log('API Raw Response:', text);
   let data;
   try {
     data = text ? JSON.parse(text) : null;
   } catch (e) {
-    console.error('API Response Parse Error:', e);
-    data = {};
+    if (res.headers.get('content-type')?.includes('text/html') || text.startsWith('<!DOCTYPE') || text.startsWith('<html')) {
+      console.error('API returned HTML instead of JSON. This often means a 404 or a server error hit the SPA fallback.');
+      console.error('URL:', res.url);
+      console.error('Status:', res.status);
+      data = { error: `Server returned HTML (${res.status}). The requested route might be missing or incorrect.` };
+    } else {
+      console.error('API Response Parse Error:', e);
+      console.log('Raw Response:', text);
+      data = { error: 'Failed to parse server response' };
+    }
   }
+
   if (!res.ok) {
     console.error('API Error Response:', { status: res.status, data });
-    const error = new Error(data?.error || data?.message || 'API request failed');
+    const error = new Error(data?.error || data?.message || `API request failed with status ${res.status}`);
     (error as any).response = {
       status: res.status,
       data: data

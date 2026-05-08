@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../lib/api';
 import { motion, AnimatePresence } from 'motion/react';
 import AuthNavbar from '../components/navigation/AuthNavbar';
+import toast from 'react-hot-toast';
 
 const Register: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -51,9 +52,11 @@ const Register: React.FC = () => {
       const data = await apiClient.post('/auth/register', { email, password, name });
       if (data.requiresVerification) {
         setSuccess(true);
+        toast.success('Registration successful! Please check your email.');
       } else if (data.token) {
         // Fallback or old behavior
         login(data.token, data.user);
+        toast.success(`Welcome, ${data.user.name}!`);
         navigate('/');
       } else {
         setError(data.message || 'Registration failed');
@@ -74,8 +77,10 @@ const Register: React.FC = () => {
     try {
       await apiClient.post('/auth/resend-verification', { email });
       setResendStatus('success');
+      toast.success('Verification link resent!');
     } catch (err) {
       setResendStatus('error');
+      toast.error('Failed to resend verification link.');
     } finally {
       setResending(false);
     }
@@ -83,8 +88,9 @@ const Register: React.FC = () => {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-bg-base relative overflow-hidden pt-24 md:pt-20">
-        <AuthNavbar />
+    <div className="min-h-screen flex flex-col bg-bg-base relative overflow-hidden">
+      <AuthNavbar />
+      <div className="flex-1 flex items-center justify-center p-4">
         <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-20">
            <div className="absolute top-10 left-10 w-64 h-64 bg-brand-primary rounded-full blur-[120px]"></div>
         </div>
@@ -127,12 +133,14 @@ const Register: React.FC = () => {
           </Link>
         </motion.div>
       </div>
+    </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-bg-base relative overflow-hidden pt-24 md:pt-20">
+    <div className="min-h-screen flex flex-col bg-bg-base relative overflow-hidden">
       <AuthNavbar />
+      <div className="flex-1 flex items-center justify-center p-4">
       {/* Background Decor */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-20">
          <div className="absolute top-10 left-10 w-64 h-64 bg-brand-primary rounded-full blur-[120px]"></div>
@@ -270,6 +278,7 @@ const Register: React.FC = () => {
           </Link>
         </div>
       </motion.div>
+      </div>
     </div>
   );
 };

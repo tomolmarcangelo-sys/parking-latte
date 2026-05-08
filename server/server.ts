@@ -87,20 +87,21 @@ async function startServer() {
 
   // Socket.io connection handling
   io.on('connection', (socket) => {
-    console.log('A user connected:', socket.id);
+    console.log('[Socket] A user connected:', socket.id);
 
     socket.on('join-room', (room) => {
+      if (!room) return;
       socket.join(room);
-      console.log(`User ${socket.id} joined room: ${room}`);
+      console.log(`[Socket] User ${socket.id} joined room: ${room}`);
     });
 
     socket.on('join-staff', () => {
       socket.join('staff');
-      console.log(`User ${socket.id} joined staff room`);
+      console.log(`[Socket] User ${socket.id} joined staff room`);
     });
 
-    socket.on('disconnect', () => {
-      console.log('User disconnected');
+    socket.on('disconnect', (reason) => {
+      console.log(`[Socket] User ${socket.id} disconnected: ${reason}`);
     });
   });
 
@@ -120,7 +121,14 @@ async function startServer() {
   app.use('/api/menu', menuRouter);
 
   const { usersRouter } = await import('./routes/users.js');
+  app.use('/api/users', usersRouter);
   app.use('/api/admin/users', usersRouter);
+
+  const { adminRouter } = await import('./routes/admin.js');
+  app.use('/api/admin', adminRouter);
+
+  const { inventoryRouter } = await import('./routes/inventory.js');
+  app.use('/api/inventory', inventoryRouter);
 
   const { authRouter } = await import('./routes/auth.js');
   app.use('/api/auth', authRouter);
@@ -137,6 +145,11 @@ async function startServer() {
     res.json({ imageUrl });
   });
 
+  // API 404 handler (Catch-all for unmatched /api routes)
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -148,6 +161,7 @@ async function startServer() {
     // Production: Serve static files from dist
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
+    
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });

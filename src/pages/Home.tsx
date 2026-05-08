@@ -5,6 +5,7 @@ import { useCart } from '../context/CartContext';
 import { motion, AnimatePresence, useScroll, useTransform } from 'motion/react';
 import { Plus, Coffee, X, Check, ArrowRight, Shield, Zap, MapPin, Star, Laptop, CreditCard, ShoppingBag, Cookie } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 const ImageWithFallback: React.FC<{ src?: string; alt: string }> = ({ src, alt }) => {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -33,23 +34,42 @@ const ImageWithFallback: React.FC<{ src?: string; alt: string }> = ({ src, alt }
 const CustomizationModal: React.FC<{ 
   product: Product; 
   onClose: () => void; 
-  onAdd: (customization: Record<string, string>, choices: CustomizationChoice[]) => void 
+  onAdd: (customization: Record<string, string | string[]>, choices: CustomizationChoice[]) => void 
 }> = ({ product, onClose, onAdd }) => {
-  const [selections, setSelections] = useState<Record<string, string>>({});
+  const [selections, setSelections] = useState<Record<string, string | string[]>>({});
   const { calculateItemPrice } = useCart();
 
   useEffect(() => {
-    const initial: Record<string, string> = {};
+    const initial: Record<string, string | string[]> = {};
     product.customizationGroups?.forEach(group => {
       if (group.required && group.choices.length > 0) {
-        initial[group.name] = group.choices[0].name;
+        if (group.allowMultiple) {
+          initial[group.name] = [group.choices[0].name];
+        } else {
+          initial[group.name] = group.choices[0].name;
+        }
       }
     });
     setSelections(initial);
   }, [product]);
 
-  const toggleChoice = (groupName: string, choiceName: string, isRequired: boolean) => {
+  const toggleChoice = (groupName: string, choiceName: string, isRequired: boolean, allowMultiple?: boolean) => {
     setSelections(prev => {
+      if (allowMultiple) {
+        const current = Array.isArray(prev[groupName]) ? (prev[groupName] as string[]) : [];
+        if (current.includes(choiceName)) {
+          const nextChoices = current.filter(c => c !== choiceName);
+          if (nextChoices.length === 0) {
+            const next = { ...prev };
+            delete next[groupName];
+            return next;
+          }
+          return { ...prev, [groupName]: nextChoices };
+        } else {
+          return { ...prev, [groupName]: [...current, choiceName] };
+        }
+      }
+
       if (isRequired) {
         return { ...prev, [groupName]: choiceName };
       }
@@ -65,9 +85,14 @@ const CustomizationModal: React.FC<{
   const getSelectedChoicesFromState = () => {
     const choices: CustomizationChoice[] = [];
     product.customizationGroups?.forEach(group => {
-      const selectedName = selections[group.name];
-      if (selectedName) {
-        const choice = group.choices.find(c => c.name === selectedName);
+      const selectedNames = selections[group.name];
+      if (Array.isArray(selectedNames)) {
+        selectedNames.forEach(selectedName => {
+          const choice = group.choices.find(c => c.name === selectedName);
+          if (choice) choices.push(choice);
+        });
+      } else if (selectedNames) {
+        const choice = group.choices.find(c => c.name === selectedNames);
         if (choice) choices.push(choice);
       }
     });
@@ -112,21 +137,27 @@ const CustomizationModal: React.FC<{
                   {group.required && <span className="text-[10px] font-bold text-brand-secondary bg-brand-secondary/10 px-2 py-0.5 rounded-full uppercase tracking-widest">Required</span>}
                 </div>
                 <div className="flex flex-wrap gap-3">
-                  {group.choices.map((choice) => (
-                    <button
-                      key={choice.id}
-                      onClick={() => toggleChoice(group.name, choice.name, group.required)}
-                      className={`px-5 py-3 rounded-2xl text-sm font-bold transition-all border-2 flex items-center gap-2 ${
-                        selections[group.name] === choice.name 
-                          ? 'bg-brand-primary border-brand-primary text-white shadow-lg shadow-brand-primary/20' 
-                          : 'bg-white dark:bg-bg-base border-border-subtle text-text-muted hover:border-brand-secondary/50'
-                      }`}
-                    >
-                      {selections[group.name] === choice.name && <Check size={14} />}
-                      {choice.name}
-                      {Number(choice.priceModifier) > 0 && <span className={`ml-1 text-xs ${selections[group.name] === choice.name ? 'opacity-70' : 'text-brand-secondary'}`}>+₱{Number(choice.priceModifier).toFixed(2)}</span>}
-                    </button>
-                  ))}
+                  {group.choices.map((choice) => {
+                    const isSelected = Array.isArray(selections[group.name]) 
+                      ? (selections[group.name] as string[]).includes(choice.name)
+                      : selections[group.name] === choice.name;
+
+                    return (
+                      <button
+                        key={choice.id}
+                        onClick={() => toggleChoice(group.name, choice.name, group.required, group.allowMultiple)}
+                        className={`px-5 py-3 rounded-2xl text-sm font-bold transition-all border-2 flex items-center gap-2 ${
+                          isSelected 
+                            ? 'bg-brand-primary border-brand-primary text-white shadow-lg shadow-brand-primary/20' 
+                            : 'bg-white dark:bg-bg-base border-border-subtle text-text-muted hover:border-brand-secondary/50'
+                        }`}
+                      >
+                        {isSelected && <Check size={14} />}
+                        {choice.name}
+                        {Number(choice.priceModifier) > 0 && <span className={`ml-1 text-xs ${isSelected ? 'opacity-70' : 'text-brand-secondary'}`}>+₱{Number(choice.priceModifier).toFixed(2)}</span>}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -134,6 +165,36 @@ const CustomizationModal: React.FC<{
         </div>
 
         <div className="p-8 pt-0 mt-auto">
+          <AnimatePresence mode="popLayout">
+            {getSelectedChoicesFromState().length > 0 && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mb-6 p-5 bg-brand-primary/5 rounded-3xl border border-border-subtle/30 space-y-2 overflow-hidden"
+              >
+                <div className="flex justify-between items-center mb-1">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-primary/60">Selected Add-ons</h4>
+                  <span className="text-[10px] font-bold text-text-muted">{getSelectedChoicesFromState().length} choice{getSelectedChoicesFromState().length > 1 ? 's' : ''}</span>
+                </div>
+                {getSelectedChoicesFromState().map(choice => (
+                  <motion.div 
+                    layout
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    key={choice.id} 
+                    className="flex justify-between items-center text-xs"
+                  >
+                    <span className="text-text-muted font-medium">{choice.name}</span>
+                    <span className="text-brand-secondary font-bold">
+                      {Number(choice.priceModifier) > 0 ? `+₱${Number(choice.priceModifier).toFixed(2)}` : 'Included'}
+                    </span>
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div className="flex items-center justify-between gap-6 pt-8 border-t border-border-subtle/50">
             <div>
               <p className="text-[10px] text-text-muted uppercase font-bold tracking-widest mb-1">Total per cup</p>
@@ -341,9 +402,9 @@ const Home: React.FC = () => {
   );
 
   return (
-    <div className="-mt-12">
+    <div className="space-y-12">
       {/* Hero Section */}
-      <section className="relative min-h-[90vh] flex items-center justify-center text-center px-4 overflow-hidden -mx-4 md:-mx-12 lg:-mx-20 -mt-24 mb-24">
+      <section className="relative min-h-[90vh] flex items-center justify-center text-center px-4 overflow-hidden -mx-4 md:-mx-12 lg:-mx-20 mb-24">
         <motion.div 
           style={{ opacity: heroOpacity, scale: heroScale }}
           className="absolute inset-0 z-0"
@@ -425,7 +486,7 @@ const Home: React.FC = () => {
                 className="w-full bg-white dark:bg-bg-sidebar border border-border-subtle p-4 md:p-6 pr-14 md:pr-16 rounded-2xl md:rounded-[32px] outline-none focus:border-brand-primary transition-all font-medium text-brand-primary shadow-sm group-hover:shadow-lg focus:shadow-xl text-sm md:text-base"
               />
               <div className="absolute right-4 md:right-6 top-1/2 -translate-y-1/2 p-1.5 md:p-2 bg-brand-primary/5 text-brand-primary rounded-xl">
-                {searchQuery ? <X size={18} className="cursor-pointer" onClick={() => setSearchQuery('')} /> : <Zap size={18} />}
+                {searchQuery ? <X size={18} className="cursor-pointer" onClick={() => { setSearchQuery(''); toast.success('Search cleared'); }} /> : <Zap size={18} />}
               </div>
             </div>
 
@@ -433,7 +494,10 @@ const Home: React.FC = () => {
               {dynamicFilters.map(f => (
                 <button
                   key={f.name}
-                  onClick={() => setActiveFilter(f.name)}
+                  onClick={() => {
+                    setActiveFilter(f.name);
+                    if (f.name !== 'All') toast.success(`Filtered by ${f.name}`, { duration: 1500, icon: f.icon });
+                  }}
                   className={`px-5 md:px-8 py-2 md:py-3 rounded-full md:rounded-2xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-1.5 md:gap-2 flex-shrink-0 ${
                     activeFilter === f.name 
                     ? 'bg-brand-primary border-brand-primary text-white shadow-xl shadow-brand-primary/20' 
@@ -519,6 +583,14 @@ const Home: React.FC = () => {
                                 setCustomizingProduct(product);
                               } else {
                                 addToCart(product);
+                                toast.success(`${product.name} added to cart!`, {
+                                  icon: '☕',
+                                  style: {
+                                    borderRadius: '16px',
+                                    background: '#2D1B14',
+                                    color: '#FFF',
+                                  },
+                                });
                               }
                             }}
                             className="flex-1 bg-brand-primary text-white py-5 rounded-2xl font-bold hover:bg-brand-secondary transition-all shadow-xl shadow-brand-primary/10 flex items-center justify-center gap-3 uppercase tracking-[0.1em] text-xs"
@@ -541,7 +613,11 @@ const Home: React.FC = () => {
             </div>
             <p className="text-text-muted font-serif text-xl italic">"No matching brew found in our archives."</p>
             <button 
-              onClick={() => { setSearchQuery(''); setActiveFilter('All'); }}
+              onClick={() => { 
+                setSearchQuery(''); 
+                setActiveFilter('All'); 
+                toast.success('Filters reset');
+              }}
               className="text-brand-primary font-bold underline underline-offset-4 hover:text-brand-secondary"
             >
               Reset Filters
@@ -654,6 +730,14 @@ const Home: React.FC = () => {
             onAdd={(customization, choices) => {
               addToCart(customizingProduct, customization, choices);
               setCustomizingProduct(null);
+              toast.success(`${customizingProduct.name} added with customizations!`, {
+                icon: '✨',
+                style: {
+                  borderRadius: '16px',
+                  background: '#2D1B14',
+                  color: '#FFF',
+                },
+              });
             }}
           />
         )}

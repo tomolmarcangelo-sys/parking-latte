@@ -3,9 +3,9 @@ import { CartItem, Product, CustomizationChoice } from '../types';
 
 interface CartContextType {
   cart: CartItem[];
-  addToCart: (product: Product, customization?: Record<string, string>, selectedChoices?: CustomizationChoice[]) => void;
-  removeFromCart: (productId: string, customization?: Record<string, string>) => void;
-  updateQuantity: (productId: string, customization: Record<string, string> | undefined, delta: number) => void;
+  addToCart: (product: Product, customization?: Record<string, string | string[]>, selectedChoices?: CustomizationChoice[]) => void;
+  removeFromCart: (productId: string, customization?: Record<string, string | string[]>) => void;
+  updateQuantity: (productId: string, customization: Record<string, string | string[]> | undefined, delta: number) => void;
   clearCart: () => void;
   total: number;
   calculateItemPrice: (item: CartItem | Product, selectedChoices?: CustomizationChoice[]) => number;
@@ -23,7 +23,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return basePrice + modifiers;
   };
 
-  const addToCart = (product: Product, customization?: Record<string, string>, selectedChoices: CustomizationChoice[] = []) => {
+  const addToCart = (product: Product, customization?: Record<string, string | string[]>, selectedChoices: CustomizationChoice[] = []) => {
     // Generate a unique ID for this specific combination in the cart
     const cartItemId = `${product.id}-${JSON.stringify(customization)}`;
 
@@ -46,13 +46,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const removeFromCart = (productId: string, customization?: Record<string, string>) => {
+  const removeFromCart = (productId: string, customization?: Record<string, string | string[]>) => {
     setCart((prev) => prev.filter((item) => 
       !(item.id === productId && JSON.stringify(item.customization) === JSON.stringify(customization))
     ));
   };
 
-  const updateQuantity = (productId: string, customization: Record<string, string> | undefined, delta: number) => {
+  const updateQuantity = (productId: string, customization: Record<string, string | string[]> | undefined, delta: number) => {
     setCart((prev) => {
       return prev.map((item) => {
         if (item.id === productId && JSON.stringify(item.customization) === JSON.stringify(customization)) {

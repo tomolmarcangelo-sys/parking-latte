@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { CartProvider } from './context/CartContext';
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import { Toaster } from 'react-hot-toast';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -31,6 +32,7 @@ export default function App() {
       <ThemeProvider>
         <AuthProvider>
           <CartProvider>
+            <Toaster position="bottom-right" reverseOrder={false} />
             <BrowserRouter>
             <Routes>
               <Route path="/login" element={<Login />} />
