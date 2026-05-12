@@ -30,17 +30,17 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
       <motion.div 
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        className="relative w-full max-w-md bg-white dark:bg-bg-sidebar rounded-[40px] shadow-2xl overflow-hidden text-center"
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-[40px] shadow-2xl overflow-hidden text-center border border-slate-200 dark:border-slate-800 transition-colors"
       >
-        <div className="p-12 space-y-6">
-          <div className="w-20 h-20 bg-red-100 rounded-[30px] flex items-center justify-center mx-auto text-brand-danger shadow-inner">
-            <AlertTriangle size={40} />
+        <div className="p-10 space-y-6">
+          <div className="w-20 h-20 bg-brand-danger/10 dark:bg-red-500/10 rounded-[30px] flex items-center justify-center mx-auto text-brand-danger shadow-sm border border-red-100 dark:border-red-900/30">
+            <AlertTriangle size={36} />
           </div>
           
-          <div className="space-y-2">
-            <h2 className="text-2xl font-serif font-black text-brand-primary">{title}</h2>
-            <p className="text-text-muted font-medium leading-relaxed">
+          <div className="space-y-3">
+            <h2 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100 tracking-tight transition-colors">{title}</h2>
+            <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed transition-colors">
               {message}
             </p>
           </div>
@@ -49,17 +49,17 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
             <button 
               onClick={onConfirm}
               disabled={isLoading}
-              className="w-full bg-brand-danger text-white py-5 rounded-2xl font-bold hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-brand-danger/20 flex items-center justify-center gap-3 disabled:opacity-50"
+              className="w-full bg-brand-danger text-white py-5 rounded-3xl font-bold hover:bg-red-600 active:scale-[0.98] transition-all shadow-xl shadow-brand-danger/20 flex items-center justify-center gap-3 disabled:opacity-50"
             >
               {isLoading ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
               ) : null}
-              <span>Yes, Delete Forever</span>
+              <span className="text-xs font-black uppercase tracking-widest">{isLoading ? 'Deleting...' : 'Yes, Delete Forever'}</span>
             </button>
             <button 
               onClick={onCancel}
               disabled={isLoading}
-              className="w-full py-5 rounded-2xl font-bold text-text-muted hover:bg-bg-sidebar transition-all flex items-center justify-center gap-2"
+              className="w-full py-5 rounded-3xl font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-[0.2em] font-sans"
             >
               <X size={18} />
               <span>Cancel Operation</span>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Coffee, ArrowRight, Eye, EyeOff, Loader2, CheckCircle2, Circle, ArrowLeft } from 'lucide-react';
+import { Coffee, ArrowRight, Eye, EyeOff, Loader2, MailCheck, CheckCircle2, Circle, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../lib/api';
 import { motion, AnimatePresence } from 'motion/react';
@@ -98,38 +98,38 @@ const Register: React.FC = () => {
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="max-w-md w-full bg-white dark:bg-bg-sidebar rounded-[3.5rem] p-12 coffee-shadow border border-border-subtle relative z-10 text-center"
+          className="max-w-md w-full bg-slate-900/50 backdrop-blur-xl rounded-[3.5rem] p-12 shadow-2xl border border-slate-800 relative z-10 text-center"
         >
-          <div className="inline-block p-5 bg-brand-primary/5 rounded-[24px] mb-8 shadow-inner text-brand-primary">
-            <CheckCircle2 size={40} strokeWidth={1.5} />
+          <div className="inline-block p-6 bg-brand-primary/10 rounded-[28px] mb-8 border border-brand-primary/20 text-brand-secondary shadow-lg shadow-brand-primary/10">
+            <MailCheck size={48} strokeWidth={1.5} className="animate-pulse" />
           </div>
-          <h1 className="text-3xl font-serif font-bold text-brand-primary mb-4">Check Your Email</h1>
-          <p className="text-text-muted mb-6 leading-relaxed">
-            We've sent a verification link to <span className="font-bold text-brand-primary">{email}</span>. 
-            Please verify your account to start ordering.
+          <h1 className="text-4xl font-serif font-bold text-white mb-4 tracking-tight">Check Your Email</h1>
+          <p className="text-slate-400 mb-8 leading-relaxed text-sm">
+            We've sent a sophisticated verification link to <br/>
+            <span className="font-bold text-brand-secondary text-base block mt-2 underline decoration-brand-secondary/30">{email}</span> 
           </p>
           
-          <div className="mb-8">
+          <div className="mb-10 p-6 bg-slate-950/50 rounded-3xl border border-slate-800/50">
             <button 
               onClick={handleResendVerification}
               disabled={resending}
-              className="text-xs font-bold text-brand-primary hover:text-brand-secondary transition-colors disabled:opacity-50"
+              className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 hover:text-brand-secondary transition-all disabled:opacity-50"
             >
-              {resending ? 'Sending...' : "Didn't get the email? Click here to resend."}
+              {resending ? 'Dispatching...' : "Didn't receive the invite? Resend"}
             </button>
             {resendStatus === 'success' && (
-              <p className="text-[10px] text-brand-primary mt-2">New link sent successfully!</p>
+              <p className="text-[10px] font-bold text-brand-secondary mt-3 uppercase tracking-widest">New verification link dispatched!</p>
             )}
             {resendStatus === 'error' && (
-              <p className="text-[10px] text-brand-danger mt-2">Failed to resend. Please try again later.</p>
+              <p className="text-[10px] font-bold text-brand-danger mt-3 uppercase tracking-widest">Courier failed. Please retry.</p>
             )}
           </div>
 
           <Link 
             to="/login"
-            className="w-full inline-flex bg-brand-primary text-white py-4 rounded-2xl font-bold hover:bg-brand-secondary transition-all items-center justify-center gap-3 shadow-xl shadow-brand-primary/10"
+            className="w-full inline-flex bg-brand-primary text-white py-5 rounded-2xl font-bold hover:bg-brand-secondary transition-all items-center justify-center gap-3 shadow-xl shadow-brand-primary/20 active:scale-95"
           >
-            Back to Login <ArrowRight size={20} />
+            Return to Login <ArrowRight size={20} />
           </Link>
         </motion.div>
       </div>

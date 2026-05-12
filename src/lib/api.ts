@@ -40,12 +40,23 @@ export const apiClient = {
       headers['Authorization'] = `Bearer ${token}`;
     }
     
-    try {
-      const res = await fetch(`${BASE_URL}${url}`, { headers });
-      return handleResponse(res);
-    } catch (err) {
-      console.error(`apiClient.get error for ${url}:`, err);
-      throw err;
+    let retires = 3;
+    let delay = 1000;
+    while (retires > 0) {
+      try {
+        const res = await fetch(`${BASE_URL}${url}`, { headers });
+        return await handleResponse(res);
+      } catch (err: any) {
+        if (err?.message === 'Failed to fetch' && retires > 1) {
+          retires--;
+          console.warn(`apiClient.get ${url} failed to fetch, retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+          continue;
+        }
+        console.error(`apiClient.get error for ${url}:`, err);
+        throw err;
+      }
     }
   },
   post: async (url: string, data: any) => {

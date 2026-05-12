@@ -76,14 +76,14 @@ const VerifyEmail: React.FC = () => {
 
         {status === 'success' && (
           <div className="space-y-6">
-            <CheckCircle2 size={48} className="mx-auto text-green-500" />
-            <h1 className="text-2xl font-serif font-bold text-brand-primary">Email Verified!</h1>
-            <p className="text-text-muted">{message}</p>
+            <CheckCircle2 size={48} className="mx-auto text-brand-secondary" />
+            <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100 tracking-tight">Email Verified!</h1>
+            <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed">{message}</p>
             <Link 
               to="/login"
-              className="w-full inline-flex bg-brand-primary text-white py-4 rounded-2xl font-bold hover:bg-brand-secondary transition-all items-center justify-center gap-3 shadow-xl shadow-brand-primary/10"
+              className="w-full inline-flex bg-brand-primary text-white py-5 rounded-2xl font-bold hover:bg-brand-secondary transition-all shadow-xl shadow-brand-primary/20 items-center justify-center gap-3"
             >
-              Go to Login <ArrowRight size={20} />
+              Proceed to Login <ArrowRight size={20} />
             </Link>
           </div>
         )}

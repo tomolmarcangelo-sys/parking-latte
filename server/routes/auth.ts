@@ -3,9 +3,9 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { getPrismaClient } from '../db.js';
 import crypto from 'crypto';
-import nodemailer from 'nodemailer';
 import { OAuth2Client } from 'google-auth-library';
 import { authenticateUser } from '../middleware/auth.js';
+import { sendVerificationEmail } from '../lib/mail.js';
 
 export const authRouter = express.Router();
 
@@ -16,15 +16,6 @@ const getGoogleClient = () => {
     }
     return googleClientInstance;
 };
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT),
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
 
 authRouter.post('/google', async (req, res) => {
   const { credential } = req.body;
@@ -157,12 +148,7 @@ authRouter.post('/resend-verification', async (req, res) => {
       }
     });
 
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM,
-      to: email,
-      subject: 'Verify your account',
-      text: `Click this link to verify: ${process.env.FRONTEND_URL}/verify-email?token=${token}&email=${email}`,
-    });
+    await sendVerificationEmail(email, token);
 
     res.json({ message: 'Verification email sent' });
   } catch (error) {
@@ -198,14 +184,9 @@ authRouter.post('/register', async (req, res) => {
       }
     });
 
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM,
-      to: email,
-      subject: 'Verify your account',
-      text: `Click this link to verify: ${process.env.FRONTEND_URL}/verify-email?token=${token}&email=${email}`,
-    });
+    await sendVerificationEmail(email, token);
 
-    res.status(201).json({ message: 'User registered, check email' });
+    res.status(201).json({ message: 'User registered, check email', requiresVerification: true });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });
