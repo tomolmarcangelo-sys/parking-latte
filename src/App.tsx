@@ -4,6 +4,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { CartProvider } from './context/CartContext';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { Toaster } from 'react-hot-toast';
+import { Coffee, Loader2 } from 'lucide-react';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -13,11 +14,24 @@ import Orders from './pages/Orders';
 import Profile from './pages/Profile';
 import StaffDashboard from './pages/StaffDashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import ScrollToTop from './components/ScrollToTop';
 
 const ProtectedRoute = ({ children, roles }: { children: React.ReactNode, roles?: string[] }) => {
   const { user, isLoading } = useAuth();
   
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-bg-base">
+        <div className="relative">
+          <div className="w-16 h-16 border-4 border-brand-primary/20 border-t-brand-primary rounded-full animate-spin"></div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Coffee size={24} className="text-brand-primary animate-pulse" />
+          </div>
+        </div>
+        <p className="mt-4 font-serif italic text-brand-primary animate-pulse">Brewing your experience...</p>
+      </div>
+    );
+  }
   if (!user) return <Navigate to="/login" />;
   if (roles && !roles.includes(user.role)) return <Navigate to="/" />;
   
@@ -34,7 +48,8 @@ export default function App() {
           <CartProvider>
             <Toaster position="bottom-right" reverseOrder={false} />
             <BrowserRouter>
-            <Routes>
+              <ScrollToTop />
+              <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/verify-email" element={<VerifyEmail />} />

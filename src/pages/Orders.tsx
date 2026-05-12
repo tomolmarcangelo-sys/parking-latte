@@ -25,7 +25,6 @@ const Orders: React.FC = () => {
 
     socket.on('connect', () => {
       console.log('[Socket] Connected for user orders');
-      socket.emit('join-room', user.id);
     });
 
     socket.on('connect_error', (err) => {

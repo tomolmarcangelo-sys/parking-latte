@@ -31,7 +31,6 @@ const StaffDashboard: React.FC = () => {
 
     socket.on('connect', () => {
       console.log('[Socket] Connected to server');
-      socket.emit('join-staff');
     });
 
     socket.on('connect_error', (err) => {

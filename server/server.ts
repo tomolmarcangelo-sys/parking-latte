@@ -9,6 +9,15 @@ import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import cors from 'cors';
 import multer from 'multer';
+import jwt from 'jsonwebtoken';
+
+// Routes
+import { menuRouter } from './routes/menu.js';
+import { usersRouter } from './routes/users.js';
+import { adminRouter } from './routes/admin.js';
+import { inventoryRouter } from './routes/inventory.js';
+import { authRouter } from './routes/auth.js';
+import { ordersRouter } from './routes/orders.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +47,8 @@ const upload = multer({
 });
 
 async function startServer() {
+  console.log('[Server] Starting initialization...');
+  
   const app = express();
   const httpServer = createServer(app);
   const io = new Server(httpServer, {
@@ -47,28 +58,40 @@ async function startServer() {
     },
   });
 
+  // Socket.io Authentication Middleware
+  io.use((socket, next) => {
+    const token = socket.handshake.auth.token;
+    if (!token) {
+      return next(new Error('Authentication error: No token provided'));
+    }
+
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
+      (socket as any).user = decoded;
+      next();
+    } catch (err) {
+      next(new Error('Authentication error: Invalid token'));
+    }
+  });
+
   const PORT = 3000;
 
   const allowedOrigins = [
     process.env.FRONTEND_URL,
     'http://localhost:3000',
     'http://localhost:5173',
-    'https://ais-dev-pzn2t2wtipqows663l4ot6-426097546045.asia-southeast1.run.app' // Current dev URL
+    'https://ais-dev-pzn2t2wtipqows663l4ot6-426097546045.asia-southeast1.run.app'
   ].filter(Boolean) as string[];
 
-  console.log('Environment:', process.env.NODE_ENV);
-  console.log('PORT:', PORT);
-  console.log('FRONTEND_URL:', process.env.FRONTEND_URL);
+  console.log('[Server] Environment:', process.env.NODE_ENV);
+  console.log('[Server] PORT:', PORT);
 
   app.use(cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
-      
       if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
         callback(null, true);
       } else {
-        // In production, you might want to be stricter, but origin: true is a good fallback
         callback(null, true); 
       }
     },
@@ -76,40 +99,41 @@ async function startServer() {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   }));
+
+  // Robust logging for all requests
   app.use((req, res, next) => {
     console.log(`[Express] ${req.method} ${req.url}`);
     next();
   });
+
   app.use(express.json());
   
-  // Serve uploads directory
   app.use('/uploads', express.static(path.join(process.cwd(), 'public/uploads')));
 
-  // Socket.io connection handling
   io.on('connection', (socket) => {
-    console.log('[Socket] A user connected:', socket.id);
+    const user = (socket as any).user;
+    console.log(`[Socket] Authenticated user connected: ${user.id} (${user.role})`);
+    
+    // Join user's personal room
+    socket.join(user.id);
+    console.log(`[Socket] User ${user.id} joined personal room`);
 
-    socket.on('join-room', (room) => {
-      if (!room) return;
-      socket.join(room);
-      console.log(`[Socket] User ${socket.id} joined room: ${room}`);
-    });
-
-    socket.on('join-staff', () => {
+    // Join staff room if role is ADMIN or STAFF
+    if (user.role === 'ADMIN' || user.role === 'STAFF') {
       socket.join('staff');
-      console.log(`[Socket] User ${socket.id} joined staff room`);
-    });
+      console.log(`[Socket] User ${user.id} joined staff room`);
+    }
 
     socket.on('disconnect', (reason) => {
       console.log(`[Socket] User ${socket.id} disconnected: ${reason}`);
     });
   });
 
-  // Make io accessible to routes
   app.set('io', io);
 
-  // API Routes
+  // Health Check
   app.get('/api/health', (req, res) => {
+    console.log('[API] Health check requested');
     res.json({ 
       status: 'ok', 
       timestamp: new Date().toISOString(),
@@ -117,26 +141,16 @@ async function startServer() {
     });
   });
 
-  const { menuRouter } = await import('./routes/menu.js');
+  // API Routes
+  console.log('[Server] Registering API routes...');
   app.use('/api/menu', menuRouter);
-
-  const { usersRouter } = await import('./routes/users.js');
   app.use('/api/users', usersRouter);
   app.use('/api/admin/users', usersRouter);
-
-  const { adminRouter } = await import('./routes/admin.js');
   app.use('/api/admin', adminRouter);
-
-  const { inventoryRouter } = await import('./routes/inventory.js');
   app.use('/api/inventory', inventoryRouter);
-
-  const { authRouter } = await import('./routes/auth.js');
   app.use('/api/auth', authRouter);
-
-  const { ordersRouter } = await import('./routes/orders.js');
   app.use('/api/orders', ordersRouter);
 
-  // Image Upload Route
   app.post('/api/upload', upload.single('image'), (req, res) => {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
@@ -145,36 +159,38 @@ async function startServer() {
     res.json({ imageUrl });
   });
 
-  // API 404 handler (Catch-all for unmatched /api routes)
+  // API 404 handler
   app.all('/api/*', (req, res) => {
+    console.warn(`[API] 404 for ${req.method} ${req.url}`);
     res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
   });
 
-  // Vite middleware for development
+  // Vite/Static Fallback
   if (process.env.NODE_ENV !== 'production') {
+    console.log('[Server] Initializing Vite middleware...');
     const vite = await createViteServer({
       server: { 
         middlewareMode: true,
-        hmr: false, // Explicitly disable HMR to prevent port 24678 conflicts
+        hmr: false,
       },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    // Production: Serve static files from dist
+    console.log('[Server] Serving production build...');
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
   httpServer.listen(Number(PORT), '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`[Server] Listening on http://0.0.0.0:${PORT}`);
   });
 }
 
 startServer().catch((err) => {
-  console.error('Failed to start server:', err);
+  console.error('[Server] Critical failure during startup:', err);
 });
+

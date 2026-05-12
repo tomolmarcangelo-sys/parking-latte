@@ -1,14 +1,8 @@
-import nodemailer from 'nodemailer';
+import sgMail from '@sendgrid/mail';
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.sendgrid.net',
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER || 'apikey',
-    pass: process.env.SMTP_PASS,
-  },
-});
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+}
 
 export const sendVerificationEmail = async (email: string, token: string) => {
   const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}&email=${email}`;
@@ -63,10 +57,27 @@ export const sendVerificationEmail = async (email: string, token: string) => {
     </html>
   `;
 
-  await transporter.sendMail({
-    from: `"Parking Latte" <${process.env.SMTP_FROM || 'noreply@parkinglatte.com'}>`,
-    to: email,
-    subject: 'Confirm Your Parking Latte Account',
-    html,
-  });
+  try {
+    if (!process.env.SENDGRID_API_KEY) {
+      console.error('[Mail] SENDGRID_API_KEY is not configured. Email will not be sent.');
+      return;
+    }
+
+    await sgMail.send({
+      to: email,
+      from: {
+        email: process.env.SMTP_FROM || 'noreply@parkinglatte.com',
+        name: 'Parking Latte'
+      },
+      subject: 'Confirm Your Parking Latte Account',
+      html,
+    });
+    console.log(`[Mail] Verification email sent to ${email}`);
+  } catch (error: any) {
+    console.error('[Mail] SendGrid API Error:', error);
+    if (error.response) {
+      console.error('[Mail] SendGrid Response Body:', JSON.stringify(error.response.body));
+    }
+    throw new Error('Failed to send verification email');
+  }
 };

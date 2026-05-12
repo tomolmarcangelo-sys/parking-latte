@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
-import { Coffee, ShoppingCart, X, Menu as MenuIcon } from 'lucide-react';
+import { Coffee, ShoppingCart, X, Menu as MenuIcon, Bell, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { motion, AnimatePresence } from 'motion/react';
@@ -8,15 +8,74 @@ import Footer from './Footer';
 import toast from 'react-hot-toast';
 import { apiClient } from '../lib/api';
 import Sidebar from './Sidebar';
+import { io } from 'socket.io-client';
+import { Order } from '../types';
 
 const Layout: React.FC = () => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { cart, total, calculateItemPrice, clearCart } = useCart();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    if (!token || !user) return;
+
+    const socket = io('/', {
+      auth: { token },
+      transports: ['websocket', 'polling']
+    });
+
+    socket.on('connect', () => {
+      // Server automatically joins rooms based on token
+    });
+
+    socket.on('order-updated', (updatedOrder: Order) => {
+      // Show toast if not on the orders page
+      if (location.pathname !== '/orders') {
+        const statusMessages = {
+          'PREPARING': 'Your order is being brewed! ☕',
+          'COMPLETED': 'Order ready! Pick it up at the counter. ✨',
+          'CANCELLED': 'Order cancelled. Contact us for details. ❌',
+          'PENDING': 'Your order is in the queue.'
+        };
+
+        const message = statusMessages[updatedOrder.status] || `Order status: ${updatedOrder.status}`;
+        
+        toast((t) => (
+          <div 
+            onClick={() => {
+              navigate('/orders');
+              toast.dismiss(t.id);
+            }}
+            className="flex items-center gap-4 cursor-pointer"
+          >
+            <div className="bg-brand-primary p-2 rounded-lg text-white">
+              <Bell size={20} />
+            </div>
+            <div>
+              <p className="font-bold text-sm text-brand-primary">Order Update</p>
+              <p className="text-xs text-text-muted">{message}</p>
+            </div>
+          </div>
+        ), {
+          duration: 6000,
+          position: 'top-right',
+        });
+
+        if (updatedOrder.status === 'COMPLETED') {
+          const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+          audio.play().catch(() => {});
+        }
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user?.id, token, location.pathname, navigate]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -28,7 +87,8 @@ const Layout: React.FC = () => {
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
-  }, [location.pathname]);
+    setIsCartOpen(false);
+  }, [location.pathname, location.hash]);
 
   const cartCount = cart.reduce((acc, i) => acc + i.quantity, 0);
 
@@ -114,8 +174,8 @@ const Layout: React.FC = () => {
         </div>
 
         {/* Main Content Area */}
-        <main className="flex-1 px-4 md:px-8 lg:px-12 py-6">
-          <div className="max-w-7xl mx-auto">
+        <main className="flex-1 px-4 md:px-8 lg:px-12 py-6 relative">
+          <div key={location.pathname + location.search} className="max-w-7xl mx-auto">
             <Outlet />
           </div>
         </main>
