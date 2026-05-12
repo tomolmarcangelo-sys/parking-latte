@@ -62,9 +62,19 @@ const Sidebar: React.FC<SidebarProps> = ({
     
     if (to.startsWith('/#')) {
       return (
-        <a href={to} onClick={onClose} className={`${baseClass} text-text-muted hover:bg-bg-sidebar hover:text-brand-primary hover:translate-x-1`}>
+        <button 
+          onClick={() => {
+            onClose();
+            navigate('/');
+            setTimeout(() => {
+              const element = document.querySelector(to.substring(1));
+              element?.scrollIntoView({ behavior: 'smooth' });
+            }, 100);
+          }} 
+          className={`${baseClass} text-text-muted hover:bg-bg-sidebar hover:text-brand-primary hover:translate-x-1 w-full text-left`}
+        >
           {content}
-        </a>
+        </button>
       );
     }
 

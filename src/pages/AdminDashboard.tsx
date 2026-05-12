@@ -2732,6 +2732,7 @@ const EditProductModal: React.FC<{
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
+        className="absolute inset-0 bg-slate-950/80 backdrop-blur-2xl transition-all"
         onClick={() => {
             const hasChanges = formData.name !== product.name || 
                               formData.price !== product.price.toString() ||
@@ -2744,287 +2745,140 @@ const EditProductModal: React.FC<{
               onClose();
             }
         }}
-        className="absolute inset-0 bg-slate-950/80 backdrop-blur-2xl transition-all"
       />
       
       <motion.div 
-        initial={{ y: 50, opacity: 0, scale: 0.95 }}
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        exit={{ y: 20, opacity: 0, scale: 0.95 }}
+        initial={{ scale: 0.95, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.95, y: 20 }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="relative w-[95vw] h-[95vh] bg-slate-50 dark:bg-[#1a1f2e] shadow-2xl rounded-[24px] border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden transition-colors"
+        className="relative w-[90vw] h-[90vh] bg-[#1a1f2e] shadow-2xl rounded-[40px] border border-slate-800 flex flex-col overflow-hidden"
       >
         {/* Header */}
-        <div className="px-8 py-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-white/70 dark:bg-[#1a1f2e]/50 backdrop-blur-md sticky top-0 z-10 transition-colors">
-          <div>
-             <div className="flex items-center gap-3 mb-1">
-               <span className="bg-teal-500/10 text-teal-500 border border-teal-500/20 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md">Edit Mode</span>
-               <h2 className="text-2xl font-black uppercase tracking-widest text-slate-900 dark:text-slate-100 transition-colors">EDIT ASSET: {product.name}</h2>
-             </div>
-             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500 transition-colors">Configuring Asset Details</p>
+        <div className="px-8 py-6 border-b border-slate-800 flex justify-between items-center bg-[#1a1f2e]/90 backdrop-blur-md sticky top-0 z-10">
+          <div className="flex items-center gap-4">
+             <h2 className="text-xl font-black uppercase tracking-widest text-white">EDIT PRODUCT ASSET: {product.name}</h2>
+             <span className="bg-teal-500/10 text-teal-400 border border-teal-500/20 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md">Active Edit</span>
           </div>
           <button 
-            onClick={() => {
-              const hasChanges = formData.name !== product.name || 
-                                formData.price !== product.price.toString() ||
-                                formData.description !== (product.description || '');
-              if (hasChanges) {
-                if (confirm('Discard unsaved changes?')) {
-                  onClose();
-                }
-              } else {
-                onClose();
-              }
-            }}
-            className="p-3 bg-slate-200/50 dark:bg-slate-800/50 hover:bg-slate-300 dark:hover:bg-slate-700/50 rounded-full transition-all text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+            onClick={onClose}
+            className="p-3 bg-slate-800 hover:bg-slate-700 rounded-full transition-all text-slate-400 hover:text-white"
           >
-            <X size={24} />
+            <X size={20} />
           </button>
         </div>
 
-        {/* Content */}
+        {/* Content - Two Column Grid */}
         <div className="flex-1 overflow-y-auto no-scrollbar p-8">
-          <form className="space-y-12 pb-20">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-              {/* Left Column: Visuals & Identity */}
-              <div className="space-y-8">
-                <div>
-                   <h3 className="text-xs font-black uppercase tracking-[0.3em] text-teal-600 dark:text-teal-400 mb-6 flex items-center gap-2">
-                     <div className="w-1.5 h-1.5 rounded-full bg-teal-600 dark:bg-teal-400"></div>
-                     Visuals & Identity
-                   </h3>
-                   
-                   {/* Image Area */}
-                   <div className="space-y-3 mb-8">
-                     <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-slate-500 ml-1">Visual Resource</label>
-                     <div className="relative group/image">
-                        <input 
-                          type="file" 
-                          ref={fileInputRef}
-                          onChange={handleImageUpload}
-                          className="hidden"
-                          accept="image/*"
-                        />
-                        {formData.imageUrl ? (
-                          <div className="relative aspect-video rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm group">
-                            <img 
-                              src={formData.imageUrl} 
-                              alt="Preview" 
-                              className="w-full h-full object-cover"
-                            />
-                            <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all duration-300 backdrop-blur-[2px]">
-                               <div className="flex gap-3">
-                                 <button 
-                                  type="button"
-                                  onClick={() => fileInputRef.current?.click()}
-                                  className="bg-teal-400 text-slate-950 px-5 py-2.5 rounded-xl flex items-center gap-2 hover:bg-teal-500 hover:text-white transition-all shadow-2xl font-black uppercase tracking-widest text-[9px]"
-                                 >
-                                   <RefreshCw size={14} className={uploading ? 'animate-spin' : ''} />
-                                   Replace
-                                 </button>
-                                 <button 
-                                  type="button"
-                                  onClick={() => setFormData({...formData, imageUrl: ''})}
-                                  className="bg-red-500/20 text-red-400 border border-red-500/30 px-5 py-2.5 rounded-xl flex items-center gap-2 hover:bg-red-500 hover:text-white transition-all shadow-2xl font-black uppercase tracking-widest text-[9px]"
-                                 >
-                                   <Trash2 size={14} />
-                                   Remove
-                                 </button>
-                               </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <button 
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            className={`w-full aspect-video border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl flex flex-col items-center justify-center gap-4 transition-all hover:bg-white dark:hover:bg-slate-900/50 hover:border-teal-500/50 dark:hover:border-teal-500/50 group ${uploading ? 'animate-pulse' : ''}`}
-                          >
-                            <div className="w-14 h-14 bg-slate-50 dark:bg-slate-900 rounded-2xl flex items-center justify-center text-slate-400 group-hover:text-teal-400 transition-all border border-slate-200 dark:border-slate-800">
-                              {uploading ? <RefreshCw size={24} className="animate-spin" /> : <Upload size={24} />}
-                            </div>
-                            <div className="text-center">
-                              <p className="font-black uppercase tracking-widest text-[10px] text-slate-500 group-hover:text-teal-400 transition-colors">{uploading ? 'Processing...' : 'Initialize Resource'}</p>
-                            </div>
-                          </button>
-                        )}
-                        <input 
-                          value={formData.imageUrl}
-                          onChange={e => setFormData({...formData, imageUrl: e.target.value})}
-                          className="mt-3 w-full px-5 py-3.5 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 focus:border-teal-500/50 focus:ring-1 focus:ring-teal-500/50 rounded-xl outline-none transition-all font-mono text-[10px] text-slate-400 dark:text-slate-400"
-                          placeholder="or paste URL here..."
-                        />
-                     </div>
-                   </div>
-
-                   <div className="space-y-6">
-                      <div className="space-y-2">
-                        <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-slate-500 ml-1">Asset Nomenclature</label>
-                        <input 
-                          required
-                          value={formData.name}
-                          onChange={e => setFormData({...formData, name: e.target.value})}
-                          className="w-full px-5 py-4 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 focus:ring-1 focus:border-teal-500/50 ring-teal-500/50 rounded-2xl outline-none transition-all font-bold text-slate-900 dark:text-slate-100 text-lg"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-slate-500 ml-1">Economic Rate (₱)</label>
-                        <input 
-                          required
-                          type="number"
-                          step="0.01"
-                          value={formData.price}
-                          onChange={e => setFormData({...formData, price: e.target.value})}
-                          className="w-full px-5 py-4 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 focus:ring-1 focus:border-teal-500/50 ring-teal-500/50 rounded-2xl outline-none transition-all font-serif font-black text-slate-900 dark:text-teal-400 text-2xl"
-                        />
-                      </div>
-                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-slate-500 ml-1">Asset Narrative</label>
-                  <textarea 
-                    value={formData.description}
-                    onChange={e => setFormData({...formData, description: e.target.value})}
-                    className="w-full px-5 py-4 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 focus:ring-1 focus:border-teal-500/50 ring-teal-500/50 rounded-2xl outline-none transition-all font-medium text-slate-700 dark:text-slate-300 resize-none h-32"
-                    placeholder="Describe the asset..."
-                  />
-                </div>
-              </div>
-
-              {/* Right Column: Configuration */}
-              <div className="space-y-12">
-                 <div>
-                    <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-900 dark:text-teal-400 mb-6 flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-slate-900 dark:bg-teal-400"></div>
-                      Configuration
-                    </h3>
-
-                    <div className="space-y-8">
-                       <div className="space-y-2">
-                          <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-slate-500 ml-1">Deployment Segment</label>
-                          <select 
-                            value={formData.categoryId}
-                            onChange={e => setFormData({...formData, categoryId: e.target.value})}
-                            className="w-full px-5 py-4 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 focus:ring-1 focus:border-teal-500/50 ring-teal-500/50 rounded-2xl outline-none transition-all font-bold text-slate-900 dark:text-slate-100 appearance-none cursor-pointer"
-                          >
-                            {categoryList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                          </select>
-                       </div>
-
-                       {/* Variations */}
-                       <div className="space-y-4">
-                          <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-slate-500 ml-1">Activation Variations</label>
-                          <div className="grid grid-cols-2 gap-3">
-                             {customizationGroups.map(group => (
-                               <button
-                                 key={group.id}
-                                 type="button"
-                                 onClick={() => toggleCustomizationGroup(group.id)}
-                                 className={`px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all duration-300 ${
-                                   formData.customizationGroupIds.includes(group.id)
-                                     ? 'bg-slate-900 dark:bg-teal-500 border-slate-900 dark:border-teal-500 text-white shadow-md dark:shadow-teal-500/20'
-                                     : 'bg-white dark:bg-slate-900/30 text-slate-500 dark:text-slate-500 border-slate-200 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-600'
-                                 }`}
-                               >
-                                 {group.name}
-                               </button>
-                             ))}
-                          </div>
-                       </div>
-
-                       {/* Ingredients */}
-                       <div className="space-y-6">
-                          <div className="flex justify-between items-center">
-                            <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-slate-500 ml-1">Resource Composition</label>
-                            <button 
-                              type="button" 
-                              onClick={addIngredient}
-                              className="group flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 transition-colors"
-                            >
-                               <Plus size={14} />
-                               Add Compound
-                            </button>
-                          </div>
-                          
-                          <div className="space-y-3">
-                            {formData.ingredients.map((ing, idx) => (
-                              <div 
-                                key={`edit-ing-${ing.inventoryItemId}-${idx}`}
-                                className="flex gap-3 bg-white dark:bg-slate-900/50 p-3 rounded-2xl border border-slate-200 dark:border-slate-800/50 group/item transition-colors hover:border-slate-300 dark:hover:border-slate-700 focus-within:ring-1 focus-within:border-teal-500/50 focus-within:ring-teal-500/50"
-                              >
-                                <div className="flex-1">
-                                  <SearchableSelect
-                                    options={inventory.map(item => ({ value: item.id, label: `${item.name} (${item.unit})` }))}
-                                    value={ing.inventoryItemId}
-                                    onChange={(val) => updateIngredient(idx, 'inventoryItemId', val)}
-                                    className="bg-transparent"
-                                  />
-                                </div>
-                                <div className="flex items-center gap-3">
-                                   <input 
-                                     type="number"
-                                     step="0.01"
-                                     value={ing.quantityNeeded || ''}
-                                     onChange={e => updateIngredient(idx, 'quantityNeeded', parseFloat(e.target.value) || 0)}
-                                     className="w-20 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-center font-bold text-slate-900 dark:text-slate-100 focus:border-teal-500 outline-none transition-all text-sm"
-                                     placeholder="Qty"
-                                   />
-                                   <button 
-                                     type="button" 
-                                     onClick={() => removeIngredient(idx)} 
-                                     className="text-slate-400 hover:text-red-500 p-2 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-all"
-                                   >
-                                     <Trash2 size={16} />
-                                   </button>
-                                </div>
-                              </div>
-                            ))}
-                            {formData.ingredients.length === 0 && (
-                              <div className="py-10 border-2 border-dashed border-slate-200 dark:border-slate-800/50 rounded-3xl text-center transition-colors">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-700 transition-colors">No composition defined</p>
-                              </div>
-                            )}
-                          </div>
-                       </div>
-                    </div>
+          <form className="grid grid-cols-2 gap-12 pb-20">
+            {/* Left: Visual Identity */}
+            <div className="space-y-8">
+              <div className="space-y-3">
+                 <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Asset Resource</label>
+                 <div className="relative aspect-video rounded-3xl overflow-hidden border border-slate-800 bg-slate-900 shadow-sm">
+                   {formData.imageUrl ? (
+                     <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                   ) : (
+                     <div className="w-full h-full flex items-center justify-center text-slate-700">Preview</div>
+                   )}
+                   <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
+                   <button 
+                     type="button" 
+                     onClick={() => fileInputRef.current?.click()}
+                     className="absolute bottom-4 right-4 bg-teal-500 text-slate-950 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-teal-400"
+                   >
+                     {uploading ? 'Processing...' : 'Change Asset'}
+                   </button>
                  </div>
-              </div>
+                 <input 
+                    value={formData.imageUrl}
+                    onChange={e => setFormData({...formData, imageUrl: e.target.value})}
+                    className="w-full px-5 py-3 bg-slate-900/50 border border-slate-800 rounded-xl outline-none transition-all font-mono text-[10px] text-slate-400"
+                    placeholder="or paste URL here..."
+                  />
+               </div>
+               
+               <div className="space-y-2">
+                 <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Asset Nomenclature</label>
+                 <input 
+                   required
+                   value={formData.name}
+                   onChange={e => setFormData({...formData, name: e.target.value})}
+                   className="w-full px-5 py-4 bg-slate-900/50 border border-slate-800 focus:ring-1 focus:border-teal-500/50 rounded-2xl outline-none font-bold text-white text-lg"
+                 />
+               </div>
+
+               <div className="space-y-2">
+                 <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Economic Rate (₱)</label>
+                 <input 
+                   required
+                   type="number"
+                   step="0.01"
+                   value={formData.price}
+                   onChange={e => setFormData({...formData, price: e.target.value})}
+                   className="w-full px-5 py-4 bg-slate-900/50 border border-slate-800 focus:ring-1 focus:border-teal-500/50 rounded-2xl outline-none text-white text-2xl font-black"
+                 />
+               </div>
+            </div>
+
+            {/* Right: Technical Configuration */}
+            <div className="space-y-8">
+               <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Deployment Segment</label>
+                  <select 
+                    value={formData.categoryId}
+                    onChange={e => setFormData({...formData, categoryId: e.target.value})}
+                    className="w-full px-5 py-4 bg-slate-900/50 border border-slate-800 rounded-2xl outline-none font-bold text-white cursor-pointer"
+                  >
+                    {categoryList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+               </div>
+
+               {/* Variations */}
+               <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Activation Variations</label>
+                  <div className="grid grid-cols-2 gap-3">
+                     {customizationGroups.map(group => (
+                       <button
+                         key={group.id}
+                         type="button"
+                         onClick={() => toggleCustomizationGroup(group.id)}
+                         className={`px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${
+                           formData.customizationGroupIds.includes(group.id)
+                             ? 'bg-teal-500 border-teal-500 text-slate-950'
+                             : 'bg-slate-900/30 text-slate-500 border-slate-800'
+                         }`}
+                       >
+                         {group.name}
+                       </button>
+                     ))}
+                  </div>
+               </div>
             </div>
           </form>
         </div>
 
         {/* Sticky Footer */}
-        <div className="p-8 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1a1f2e] sticky bottom-0 z-10 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] dark:shadow-[0_-10px_30px_rgba(0,0,0,0.5)] transition-colors">
-           <div className="flex gap-6 items-center flex-row-reverse sm:flex-row">
-              <div className="flex-1 hidden sm:block">
-                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Cmd/Ctrl + S to Save, Esc to Cancel</p>
+        <div className="p-8 border-t border-slate-800 bg-[#1a1f2e] sticky bottom-0 z-10 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
+           <div className="flex justify-between items-center">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Press ESC to discard, Ctrl+S to save</p>
+              <div className="flex gap-4">
+                <button 
+                  type="button" 
+                  onClick={onClose}
+                  className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 hover:text-white"
+                >
+                  Discard
+                </button>
+                <button 
+                  onClick={handleSubmit}
+                  disabled={submitting || uploading}
+                  className="bg-white text-slate-950 px-10 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-200 flex items-center justify-center gap-4 disabled:opacity-50 min-w-[200px]"
+                >
+                  {submitting ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                  {submitting ? 'Saving...' : 'Save Changes'}
+                </button>
               </div>
-              <button 
-                type="button" 
-                onClick={() => {
-                  const hasChanges = formData.name !== product.name || 
-                                    formData.price !== product.price.toString() ||
-                                    formData.description !== (product.description || '');
-                  if (hasChanges) {
-                    if (confirm('Discard unsaved changes?')) {
-                      onClose();
-                    }
-                  } else {
-                    onClose();
-                  }
-                }}
-                className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
-              >
-                Discard Changes
-              </button>
-              <button 
-                onClick={handleSubmit}
-                disabled={submitting || uploading}
-                className="bg-slate-900 dark:bg-white text-white dark:text-slate-950/90 px-10 py-5 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-800 dark:hover:bg-slate-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] dark:shadow-[0_0_20px_rgba(255,255,255,0.2)] flex items-center justify-center gap-4 disabled:opacity-50 min-w-[200px]"
-              >
-                {submitting ? <RefreshCw size={20} className="animate-spin" /> : <Save size={20} />}
-                {submitting ? 'Saving...' : 'Save Changes'}
-              </button>
            </div>
         </div>
       </motion.div>
