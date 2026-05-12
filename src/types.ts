@@ -47,6 +47,15 @@ export interface ProductIngredient {
   productId: string;
   inventoryItemId: string;
   quantityNeeded: number;
+  product?: Product;
+}
+
+export interface CustomizationIngredient {
+  id: string;
+  choiceId: string;
+  inventoryItemId: string;
+  quantityNeeded: number;
+  choice?: CustomizationChoice;
 }
 
 export interface CartItem extends Product {
@@ -81,4 +90,6 @@ export interface InventoryItem {
   stockLevel: number;
   lowStockThreshold: number;
   updatedAt: string;
+  products?: ProductIngredient[];
+  customizations?: CustomizationIngredient[];
 }

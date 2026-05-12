@@ -3,7 +3,7 @@ import { apiClient } from '../lib/api';
 import { Category, Product, CustomizationChoice } from '../types';
 import { useCart } from '../context/CartContext';
 import { motion, AnimatePresence, useScroll, useTransform } from 'motion/react';
-import { Plus, Coffee, X, Check, ArrowRight, Shield, Zap, MapPin, Star, Laptop, CreditCard, ShoppingBag, Cookie, Trash2, ArrowUpRight } from 'lucide-react';
+import { Plus, Coffee, X, Check, ArrowRight, Shield, Zap, MapPin, Star, Laptop, CreditCard, ShoppingBag, Cookie, Trash2, ArrowUpRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -281,6 +281,34 @@ const Home: React.FC = () => {
   const [customizingProduct, setCustomizingProduct] = useState<Product | null>(null);
   const { addToCart } = useCart();
   const menuRef = useRef<HTMLElement>(null);
+  
+  const filterScrollRef = useRef<HTMLDivElement>(null);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(false);
+
+  const checkFilterScroll = () => {
+    if (filterScrollRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = filterScrollRef.current;
+      setShowLeftArrow(scrollLeft > 0);
+      setShowRightArrow(Math.ceil(scrollLeft + clientWidth) < scrollWidth);
+    }
+  };
+
+  useEffect(() => {
+    const timeoutId = setTimeout(checkFilterScroll, 100);
+    window.addEventListener('resize', checkFilterScroll);
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('resize', checkFilterScroll);
+    };
+  }, [categories]);
+
+  const scrollFilter = (direction: 'left' | 'right') => {
+    if (filterScrollRef.current) {
+      const scrollAmount = direction === 'left' ? -200 : 200;
+      filterScrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    }
+  };
 
   const { scrollY } = useScroll();
   const heroOpacity = useTransform(scrollY, [0, 500], [1, 0]);
@@ -524,24 +552,66 @@ const Home: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex overflow-x-auto whitespace-nowrap gap-2 md:gap-3 pb-2 md:pb-0 no-scrollbar justify-start md:justify-center px-2">
-              {dynamicFilters.map(f => (
-                <button
-                  key={f.name}
-                  onClick={() => {
-                    setActiveFilter(f.name);
-                    if (f.name !== 'All') toast.success(`Filtered by ${f.name}`, { duration: 1500, icon: f.icon });
-                  }}
-                  className={`px-5 md:px-8 py-2 md:py-3 rounded-full md:rounded-2xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-1.5 md:gap-2 flex-shrink-0 ${
-                    activeFilter === f.name 
-                    ? 'bg-brand-primary border-brand-primary text-white shadow-xl shadow-brand-primary/20' 
-                    : 'bg-white dark:bg-bg-sidebar border-border-subtle text-text-muted hover:border-brand-secondary hover:text-brand-secondary'
-                  }`}
-                >
-                  <span className="scale-90 md:scale-100">{f.icon}</span>
-                  {f.name}
-                </button>
-              ))}
+            <div className="relative flex items-center w-full group/filter">
+              <AnimatePresence>
+                {showLeftArrow && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute left-0 top-0 bottom-0 flex items-center justify-start z-10 w-24 bg-gradient-to-r from-bg-base via-bg-base/90 to-transparent pointer-events-none pb-2 md:pb-0"
+                  >
+                    <button 
+                      onClick={() => scrollFilter('left')} 
+                      className="p-1.5 md:p-2 bg-white dark:bg-bg-sidebar border border-border-subtle rounded-full ml-1 md:ml-2 shadow-md text-brand-primary pointer-events-auto hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div 
+                ref={filterScrollRef}
+                onScroll={checkFilterScroll}
+                className="flex overflow-x-auto whitespace-nowrap gap-2 md:gap-3 pb-2 md:pb-0 no-scrollbar justify-start px-2 w-full scroll-smooth"
+              >
+                {dynamicFilters.map(f => (
+                  <button
+                    key={f.name}
+                    onClick={() => {
+                      setActiveFilter(f.name);
+                      if (f.name !== 'All') toast.success(`Filtered by ${f.name}`, { duration: 1500, icon: f.icon });
+                    }}
+                    className={`px-5 md:px-8 py-2 md:py-3 rounded-full md:rounded-2xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all border flex items-center gap-1.5 md:gap-2 flex-shrink-0 ${
+                      activeFilter === f.name 
+                      ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900 shadow-md group border-2' 
+                      : 'bg-white dark:bg-bg-sidebar border-border-subtle text-text-muted hover:border-text-muted hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <span className="scale-90 md:scale-100">{f.icon}</span>
+                    {f.name}
+                  </button>
+                ))}
+              </div>
+
+              <AnimatePresence>
+                {showRightArrow && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute right-0 top-0 bottom-0 flex items-center justify-end z-10 w-24 bg-gradient-to-l from-bg-base via-bg-base/90 to-transparent pointer-events-none pb-2 md:pb-0"
+                  >
+                    <button 
+                      onClick={() => scrollFilter('right')} 
+                      className="p-1.5 md:p-2 bg-white dark:bg-bg-sidebar border border-border-subtle rounded-full mr-1 md:mr-2 shadow-md text-brand-primary pointer-events-auto hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>

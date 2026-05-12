@@ -34,6 +34,7 @@ model User {
   verificationTokenExpires DateTime?
   role                    Role      @default(CUSTOMER)
   orders                  Order[]
+  auditLogs               AuditLog[] @relation("AdminLogs")
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 }
@@ -84,6 +85,7 @@ model CustomizationChoice {
   priceModifier Decimal            @db.Decimal(10, 2) @default(0)
   groupId       String
   group         CustomizationGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  ingredients   CustomizationIngredient[]
 }
 
 model InventoryItem {
@@ -93,6 +95,7 @@ model InventoryItem {
   stockLevel        Float               @default(0)
   lowStockThreshold Float               @default(10)
   products          ProductIngredient[]
+  customizations    CustomizationIngredient[]
   updatedAt         DateTime            @updatedAt
 }
 
@@ -105,9 +108,18 @@ model ProductIngredient {
   quantityNeeded  Float // How much of the inventory item is needed for 1 portion/unit of this product
 }
 
+model CustomizationIngredient {
+  id              String              @id @default(uuid())
+  choice          CustomizationChoice @relation(fields: [choiceId], references: [id], onDelete: Cascade)
+  choiceId        String
+  inventoryItem   InventoryItem       @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  inventoryItemId String
+  quantityNeeded  Float
+}
+
 model Order {
   id          String      @id @default(uuid())
-  user        User        @relation(fields: [userId], references: [id])
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId      String
   status      OrderStatus @default(PENDING)
   totalAmount Decimal     @db.Decimal(10, 2)
@@ -130,7 +142,8 @@ model OrderItem {
 model AuditLog {
   id          String   @id @default(uuid())
   action      String   // e.g., "ROLE_CHANGE"
-  adminId     String
+  adminId     String?
+  admin       User?    @relation("AdminLogs", fields: [adminId], references: [id], onDelete: SetNull)
   adminName   String?
   targetId    String
   targetName  String?

@@ -8,7 +8,24 @@ inventoryRouter.get('/', async (req, res) => {
   const prisma = await getPrismaClient();
   if (!prisma) return res.status(503).json({ error: 'Database not configured' });
   try {
-    const inventory = await prisma.inventoryItem.findMany();
+    const inventory = await prisma.inventoryItem.findMany({
+      include: {
+        products: {
+          include: {
+            product: true
+          }
+        },
+        customizations: {
+          include: {
+            choice: {
+              include: {
+                group: true
+              }
+            }
+          }
+        }
+      }
+    });
     res.json(inventory);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch inventory' });
@@ -18,21 +35,53 @@ inventoryRouter.get('/', async (req, res) => {
 inventoryRouter.post('/', authenticateAdmin, async (req, res) => {
   const prisma = await getPrismaClient();
   if (!prisma) return res.status(503).json({ error: 'Database not configured' });
-  const { name, unit, stockLevel, lowStockThreshold } = req.body;
+  const { id, name, unit, stockLevel, lowStockThreshold, productLinks, customizationLinks } = req.body;
   try {
-    const item = await prisma.inventoryItem.upsert({
-      where: { name },
-      update: {
+    const item = await prisma.$transaction(async (tx) => {
+      const existing = id ? await tx.inventoryItem.findUnique({ where: { id } }) : null;
+      
+      const inventoryData = {
+        name,
         unit,
-        stockLevel: { increment: stockLevel },
-        lowStockThreshold
-      },
-      create: { name, unit, stockLevel, lowStockThreshold }
+        stockLevel: id ? Number(stockLevel) : Number(stockLevel), // If updating, we might want to additive vs set. Here we set.
+        lowStockThreshold: Number(lowStockThreshold)
+      };
+
+      const upsertedItem = id 
+        ? await tx.inventoryItem.update({ where: { id }, data: inventoryData })
+        : await tx.inventoryItem.create({ data: inventoryData });
+
+      // Handle Product Links
+      if (productLinks) {
+        await tx.productIngredient.deleteMany({ where: { inventoryItemId: upsertedItem.id } });
+        await tx.productIngredient.createMany({
+          data: productLinks.map((link: any) => ({
+            inventoryItemId: upsertedItem.id,
+            productId: link.productId,
+            quantityNeeded: Number(link.quantityNeeded)
+          }))
+        });
+      }
+
+      // Handle Customization Links
+      if (customizationLinks) {
+        await tx.customizationIngredient.deleteMany({ where: { inventoryItemId: upsertedItem.id } });
+        await tx.customizationIngredient.createMany({
+          data: customizationLinks.map((link: any) => ({
+            inventoryItemId: upsertedItem.id,
+            choiceId: link.choiceId,
+            quantityNeeded: Number(link.quantityNeeded)
+          }))
+        });
+      }
+
+      return upsertedItem;
     });
+
     res.json(item);
   } catch (error: any) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to create item', details: error.message || String(error) });
+    res.status(500).json({ error: 'Failed to process inventory item', details: error.message || String(error) });
   }
 });
 

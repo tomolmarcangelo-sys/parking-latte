@@ -85,11 +85,12 @@ ordersRouter.post('/', async (req, res) => {
 
       // 2. Deduct inventory
       for (const item of items) {
-        const ingredients = await tx.productIngredient.findMany({
+        // A. Base Product Ingredients
+        const productIngredients = await tx.productIngredient.findMany({
             where: { productId: item.id },
         });
 
-        for (const ingredient of ingredients) {
+        for (const ingredient of productIngredients) {
           await tx.inventoryItem.update({
             where: { id: ingredient.inventoryItemId },
             data: {
@@ -98,6 +99,40 @@ ordersRouter.post('/', async (req, res) => {
               }
             }
           });
+        }
+
+        // B. Customization Ingredients
+        if (item.customization && typeof item.customization === 'object') {
+          // Iterate over all customization categories
+          for (const [categoryName, choiceValue] of Object.entries(item.customization as Record<string, any>)) {
+            const values = Array.isArray(choiceValue) ? choiceValue : [choiceValue];
+            
+            for (const name of values) {
+              if (!name) continue;
+              
+              // Find the choice associated with this name in this category
+              const choice = await tx.customizationChoice.findFirst({
+                where: {
+                  name: String(name),
+                  group: { name: categoryName }
+                },
+                include: { ingredients: true }
+              });
+
+              if (choice && choice.ingredients.length > 0) {
+                for (const ingredient of choice.ingredients) {
+                  await tx.inventoryItem.update({
+                    where: { id: ingredient.inventoryItemId },
+                    data: {
+                      stockLevel: {
+                        decrement: ingredient.quantityNeeded * item.quantity
+                      }
+                    }
+                  });
+                }
+              }
+            }
+          }
         }
       }
       return newOrder;

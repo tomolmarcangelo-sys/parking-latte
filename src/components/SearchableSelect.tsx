@@ -44,24 +44,24 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({ options, val
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 top-[calc(100%+4px)] left-0 w-[200px] bg-white border border-border-subtle rounded-xl shadow-xl overflow-hidden flex flex-col max-h-60 transform origin-top-left">
-          <div className="p-2 border-b border-border-subtle/50 flex items-center gap-2">
-            <Search size={14} className="text-text-muted flex-shrink-0" />
+        <div className="absolute z-50 top-[calc(100%+4px)] left-0 w-[240px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-72 transform origin-top-left transition-colors">
+          <div className="p-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3 transition-colors">
+            <Search size={14} className="text-slate-400 flex-shrink-0" />
             <input
               autoFocus
               type="text"
-              className="w-full text-xs outline-none bg-transparent"
+              className="w-full text-xs outline-none bg-transparent text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
               placeholder="Search items..."
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-          <div className="overflow-y-auto flex-1 p-1">
+          <div className="overflow-y-auto flex-1 p-1.5 no-scrollbar">
             {filteredOptions.length > 0 ? (
               filteredOptions.map(option => (
                 <div
                   key={option.value}
-                  className={`px-3 py-2 text-xs flex items-center cursor-pointer rounded-lg hover:bg-bg-sidebar transition-colors ${option.value === value ? 'bg-brand-primary/5 text-brand-primary font-bold' : ''}`}
+                  className={`px-3 py-2.5 text-xs flex items-center cursor-pointer rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-all ${option.value === value ? 'bg-slate-900 dark:bg-brand-secondary text-white dark:text-slate-950 font-bold' : 'text-slate-600 dark:text-slate-400'}`}
                   onClick={() => {
                     onChange(option.value);
                     setIsOpen(false);
@@ -71,7 +71,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({ options, val
                 </div>
               ))
             ) : (
-              <div className="p-3 text-xs text-text-muted italic text-center">No results found</div>
+              <div className="p-4 text-xs text-slate-400 italic text-center">No segments found</div>
             )}
           </div>
         </div>

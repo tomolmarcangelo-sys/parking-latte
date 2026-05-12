@@ -12,13 +12,16 @@ import { io } from 'socket.io-client';
 import { Order } from '../types';
 
 const Layout: React.FC = () => {
-  const { user, token } = useAuth();
+  const { user, token, isAdmin } = useAuth();
   const { cart, total, calculateItemPrice, clearCart } = useCart();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  const toggleSidebar = () => setIsSidebarCollapsed(!isSidebarCollapsed);
 
   useEffect(() => {
     if (!token || !user) return;
@@ -129,9 +132,11 @@ const Layout: React.FC = () => {
         isOpen={isMobileMenuOpen} 
         onClose={() => setIsMobileMenuOpen(false)} 
         onOpenCart={() => setIsCartOpen(true)}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={toggleSidebar}
       />
 
-      <div className="flex-1 flex flex-col min-h-screen min-w-0 transition-all duration-500 md:ml-64 relative">
+      <div className={`flex-1 flex flex-col min-h-screen min-w-0 transition-all duration-300 ${isSidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} relative`}>
         {/* Mobile Top Bar */}
         <div className={`md:hidden sticky top-0 z-[40] transition-all duration-300 flex justify-between items-center px-4 py-3 ${
           isScrolled 
@@ -175,9 +180,18 @@ const Layout: React.FC = () => {
 
         {/* Main Content Area */}
         <main className="flex-1 px-4 md:px-8 lg:px-12 py-6 relative">
-          <div key={location.pathname + location.search} className="max-w-7xl mx-auto">
-            <Outlet />
-          </div>
+          <AnimatePresence mode="wait">
+            <motion.div 
+              key={location.pathname}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="max-w-7xl mx-auto"
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </main>
         
         <Footer />
