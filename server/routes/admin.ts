@@ -239,20 +239,38 @@ adminRouter.get('/audit-logs', async (req, res) => {
   if (!prisma) return res.status(503).json({ error: 'Database not configured' });
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 20;
+  const action = req.query.action as string;
+  const adminId = req.query.adminId as string;
   const skip = (page - 1) * limit;
 
+  const where: any = {};
+  if (action) {
+    where.action = action;
+  }
+  if (adminId) {
+    where.adminId = adminId;
+  }
+
   try {
-    const [logs, total] = await Promise.all([
+    const [logs, total, actionsAvailable] = await Promise.all([
       prisma.auditLog.findMany({
+        where,
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit
       }),
-      prisma.auditLog.count()
+      prisma.auditLog.count({ where }),
+      prisma.auditLog.findMany({
+        select: { action: true },
+        distinct: ['action']
+      })
     ]);
+
+    const distinctActions = actionsAvailable.map(a => a.action);
 
     res.json({
       logs,
+      distinctActions,
       pagination: {
         total,
         pages: Math.ceil(total / limit),

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
-import { Coffee, ShoppingCart, X, Menu as MenuIcon, Bell, Loader2 } from 'lucide-react';
+import { Coffee, ShoppingCart, X, Menu as MenuIcon, Bell, Loader2, Trash2, Edit2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { motion, AnimatePresence } from 'motion/react';
@@ -9,15 +9,19 @@ import toast from 'react-hot-toast';
 import { apiClient } from '../lib/api';
 import Sidebar from './Sidebar';
 import { io } from 'socket.io-client';
-import { Order } from '../types';
+import { Order, CartItem } from '../types';
+import { CartItemSkeleton } from './SkeletonLoader';
+import { ProductModal } from './ProductModal';
 
 const Layout: React.FC = () => {
   const { user, token, isAdmin } = useAuth();
-  const { cart, total, calculateItemPrice, clearCart } = useCart();
+  const { cart, total, calculateItemPrice, clearCart, isLoading, removeFromCart, updateCartItem, updateQuantity } = useCart();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -102,13 +106,14 @@ const Layout: React.FC = () => {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       await apiClient.post('/orders', {
         items: cart.map(item => ({
-          id: item.id,
+          productId: item.productId,
           quantity: item.quantity,
           customization: item.customization,
-          price: calculateItemPrice(item)
+          priceAtOrder: calculateItemPrice(item)
         })),
         totalAmount: total
       });
@@ -120,9 +125,11 @@ const Layout: React.FC = () => {
         icon: '☕',
       });
       navigate('/orders');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Checkout failed:', err);
-      toast.error('Failed to place order. Please check your connection.');
+      toast.error(err.message || 'Failed to place order. Please check your connection.', { duration: 5000 });
+    } finally {
+        setIsSubmitting(false);
     }
   };
 
@@ -230,13 +237,26 @@ const Layout: React.FC = () => {
                 </button>
               </div>
 
-              {cart.length === 0 ? (
+              {isLoading ? (
+                <div className="flex-1 space-y-4">
+                  {[...Array(3)].map((_, i) => <CartItemSkeleton key={i} />)}
+                </div>
+              ) : cart.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-center px-10">
                   <div className="w-24 h-24 bg-bg-base rounded-full flex items-center justify-center mb-8 shadow-inner">
                     <Coffee size={40} className="text-brand-secondary opacity-30" />
                   </div>
                   <p className="text-brand-primary font-serif italic text-xl mb-2">The aroma is missing...</p>
-                  <p className="text-text-muted text-sm font-medium">Your bag is empty. Explore our artisan craft today.</p>
+                  <p className="text-text-muted text-sm font-medium mb-8">Your bag is empty. Explore our artisan craft today.</p>
+                  <button
+                    onClick={() => {
+                        setIsCartOpen(false);
+                        navigate('/');
+                    }}
+                    className="bg-brand-primary text-white py-3 px-8 rounded-xl font-bold hover:bg-brand-secondary transition-all"
+                  >
+                    View Menu
+                  </button>
                 </div>
               ) : (
                 <div className="flex-1 space-y-8 overflow-y-auto pr-2 no-scrollbar">
@@ -252,14 +272,14 @@ const Layout: React.FC = () => {
                       >
                         <div className="w-24 h-24 rounded-[28px] bg-bg-base overflow-hidden border border-border-subtle flex-shrink-0 relative shadow-inner">
                           <img 
-                            src={item.imageUrl || 'https://images.unsplash.com/photo-1541167760496-162955ed8a9f?w=200&q=80'} 
-                            alt={item.name}
+                            src={item.product.imageUrl || 'https://images.unsplash.com/photo-1541167760496-162955ed8a9f?w=200&q=80'} 
+                            alt={item.product.name}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                             referrerPolicy="no-referrer"
                           />
                         </div>
                         <div className="flex-1 min-w-0 space-y-1">
-                          <p className="font-serif font-bold text-brand-primary text-lg truncate">{item.name}</p>
+                          <p className="font-serif font-bold text-brand-primary text-lg truncate">{item.product.name}</p>
                           <p className="text-xs text-text-muted font-bold uppercase tracking-widest">
                             {item.quantity} × ₱{itemPrice.toFixed(2)}
                           </p>
@@ -273,8 +293,21 @@ const Layout: React.FC = () => {
                             </div>
                           )}
                         </div>
-                        <div className="text-right">
-                          <p className="font-bold text-brand-primary text-lg">₱{(item.quantity * itemPrice).toFixed(2)}</p>
+                        <div className="flex flex-col gap-1 items-center">
+                           <button 
+                             onClick={() => removeFromCart(item.id)} 
+                             className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                             title="Remove item"
+                           >
+                              <Trash2 size={16} />
+                           </button>
+                           <button 
+                             onClick={() => setEditingCartItem(item)}
+                             className="p-2 text-slate-400 hover:text-brand-primary hover:bg-brand-primary/10 rounded-lg transition-colors"
+                             title="Edit item"
+                           >
+                              <Edit2 size={16} />
+                           </button>
                         </div>
                       </motion.div>
                     );
@@ -288,16 +321,31 @@ const Layout: React.FC = () => {
                    <p className="text-4xl font-serif font-bold text-brand-primary">₱{total.toFixed(2)}</p>
                 </div>
                 <button 
-                  disabled={cart.length === 0}
+                  disabled={cart.length === 0 || isSubmitting}
                   onClick={handleCheckout}
                   className="w-full bg-brand-primary text-white py-5 rounded-[20px] font-bold disabled:opacity-50 hover:bg-brand-secondary hover:-translate-y-1 transition-all shadow-xl shadow-brand-primary/20 flex items-center justify-center gap-3"
                 >
-                  <ShoppingCart size={20} />
-                  <span>Begin Pouring Order</span>
+                  {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : <ShoppingCart size={20} />}
+                  <span>{isSubmitting ? 'Brewing your order...' : 'Begin Pouring Order'}</span>
                 </button>
               </div>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {editingCartItem && (
+          <ProductModal 
+            product={editingCartItem.product}
+            initialCustomization={editingCartItem.customization as Record<string, string | string[]>}
+            isEditing={true}
+            onClose={() => setEditingCartItem(null)}
+            onAdd={async (customization) => {
+              await updateCartItem(editingCartItem.id, customization);
+              setEditingCartItem(null);
+            }}
+          />
         )}
       </AnimatePresence>
     </div>

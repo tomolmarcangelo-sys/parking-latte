@@ -19,16 +19,16 @@
 
 :root {
   --shadow-color: rgba(74, 55, 40, 0.05);
-  --brand-primary: #4A3728;
-  --brand-secondary: #C8A97E;
+  --brand-primary: #1A1F2E; /* Deep Navy */
+  --brand-secondary: #C8A97E; /* Warm Coffee Brown */
   --brand-accent: #7D9061;
   --brand-danger: #C2410C;
   
-  --bg-base: #f8fafc; /* slate-50 */
+  --bg-base: #FDFCFB; /* Off-White */
   --bg-sidebar: #ffffff; /* white */
   --border-subtle: #e2e8f0; /* slate-200 */
-  --text-main: #0f172a; /* slate-900 */
-  --text-muted: #64748b; /* slate-500 */
+  --text-main: #1A1F2E; /* Deep Slate/Navy */
+  --text-muted: #64748B; /* Cool Grey */
 }
 
 .dark {

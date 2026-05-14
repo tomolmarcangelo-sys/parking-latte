@@ -18,6 +18,7 @@ import { adminRouter } from './routes/admin.js';
 import { inventoryRouter } from './routes/inventory.js';
 import { authRouter } from './routes/auth.js';
 import { ordersRouter } from './routes/orders.js';
+import { cartRouter } from './routes/cart.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -102,7 +103,7 @@ async function startServer() {
 
   // Robust logging for all requests
   app.use((req, res, next) => {
-    console.log(`[Express] ${req.method} ${req.url}`);
+    console.log(`[Express] [${new Date().toISOString()}] ${req.method} ${req.url}`);
     next();
   });
 
@@ -115,8 +116,8 @@ async function startServer() {
     console.log(`[Socket] Authenticated user connected: ${user.id} (${user.role})`);
     
     // Join user's personal room
-    socket.join(user.id);
-    console.log(`[Socket] User ${user.id} joined personal room`);
+    socket.join(`user_${user.id}`);
+    console.log(`[Socket] User ${user.id} joined personal room user_${user.id}`);
 
     // Join staff room if role is ADMIN or STAFF
     if (user.role === 'ADMIN' || user.role === 'STAFF') {
@@ -150,6 +151,7 @@ async function startServer() {
   app.use('/api/inventory', inventoryRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/orders', ordersRouter);
+  app.use('/api/cart', cartRouter);
 
   app.post('/api/upload', upload.single('image'), (req, res) => {
     if (!req.file) {

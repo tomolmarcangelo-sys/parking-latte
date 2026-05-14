@@ -1,5 +1,5 @@
 export type Role = 'CUSTOMER' | 'STAFF' | 'ADMIN';
-export type OrderStatus = 'PENDING' | 'PREPARING' | 'COMPLETED' | 'CANCELLED';
+export type OrderStatus = 'PENDING' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED';
 
 export interface User {
   id: string;
@@ -58,10 +58,13 @@ export interface CustomizationIngredient {
   choice?: CustomizationChoice;
 }
 
-export interface CartItem extends Product {
+export interface CartItem {
+  id: string;
+  userId: string;
+  productId: string;
+  product: Product;
   quantity: number;
-  customization?: Record<string, string | string[]>; // Group Name -> Choice Name(s)
-  selectedChoices?: CustomizationChoice[]; // To track total cost better
+  customization?: any;
 }
 
 export interface Order {
@@ -72,6 +75,8 @@ export interface Order {
   items: OrderItem[];
   user: { name: string; email: string };
   createdAt: string;
+  staffNotes?: string;
+  lastUpdatedBy?: string;
 }
 
 export interface OrderItem {
@@ -88,6 +93,7 @@ export interface InventoryItem {
   name: string;
   unit: string;
   stockLevel: number;
+  projectedStock?: number;
   lowStockThreshold: number;
   updatedAt: string;
   products?: ProductIngredient[];

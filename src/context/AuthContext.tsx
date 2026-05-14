@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User } from '../types';
 
 interface AuthContextType {
@@ -30,27 +30,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(false);
   }, []);
 
-  const login = (newToken: string, newUser: User) => {
+  const login = useCallback((newToken: string, newUser: User) => {
     setToken(newToken);
     setUser(newUser);
     localStorage.setItem('token', newToken);
     localStorage.setItem('user', JSON.stringify(newUser));
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     setToken(null);
     setUser(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-  };
+  }, []);
 
-  const updateUserInfo = (newUser: User) => {
+  const updateUserInfo = useCallback((newUser: User) => {
     setUser(newUser);
     localStorage.setItem('user', JSON.stringify(newUser));
-  };
+  }, []);
+
+  const value = React.useMemo(() => ({
+    user,
+    token,
+    login,
+    logout,
+    updateUserInfo,
+    isLoading,
+    isAdmin
+  }), [user, token, login, logout, updateUserInfo, isLoading, isAdmin]);
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, updateUserInfo, isLoading, isAdmin }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

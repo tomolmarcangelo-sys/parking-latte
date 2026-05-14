@@ -10,10 +10,11 @@ import { CreateUserModal } from '../components/CreateUserModal';
 import { UserEditModal } from '../components/UserEditModal';
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { toast } from 'react-hot-toast';
+import { TransactionsTable } from '../components/TransactionsTable';
 
 const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'products' | 'variations' | 'categories' | 'inventory' | 'audit-logs'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'products' | 'variations' | 'categories' | 'inventory' | 'audit-logs' | 'transactions'>('overview');
   
   const [stats, setStats] = useState<any>(null);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -22,6 +23,9 @@ const AdminDashboard: React.FC = () => {
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [auditPagination, setAuditPagination] = useState<any>(null);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [auditActionFilter, setAuditActionFilter] = useState('');
+  const [auditAdminFilter, setAuditAdminFilter] = useState('');
+  const [auditDistinctActions, setAuditDistinctActions] = useState<string[]>([]);
   const [customizations, setCustomizations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
@@ -156,11 +160,10 @@ const AdminDashboard: React.FC = () => {
 
     if (user?.role !== 'STAFF') {
       promises.push(apiClient.get('/admin/customizations'));
-      promises.push(apiClient.get('/admin/audit-logs?page=1&limit=20'));
     }
 
     Promise.all(promises).then((results) => {
-      const [statsData, invData, menuData, userData, categoryData, customData, auditResponse] = results;
+      const [statsData, invData, menuData, userData, categoryData, customData] = results;
       setStats(statsData);
       setInventory(invData);
       setCategories(menuData);
@@ -168,27 +171,45 @@ const AdminDashboard: React.FC = () => {
       setCategoryList(categoryData);
       if (user?.role !== 'STAFF') {
         setCustomizations(customData);
-        setAuditLogs(auditResponse.logs);
-        setAuditPagination(auditResponse.pagination);
       }
       setLoading(false);
     });
   };
 
-  const loadMoreAuditLogs = async () => {
-    if (!auditPagination || auditPagination.currentPage >= auditPagination.pages || auditLoading) return;
-    
+  const fetchAuditLogs = async (page: number = 1, append: boolean = false) => {
+    if (user?.role === 'STAFF') return;
     setAuditLoading(true);
     try {
-      const nextPage = auditPagination.currentPage + 1;
-      const response = await apiClient.get(`/admin/audit-logs?page=${nextPage}&limit=20`);
-      setAuditLogs(prev => [...prev, ...response.logs]);
+      const params = new URLSearchParams({ page: page.toString(), limit: '20' });
+      if (auditActionFilter) params.append('action', auditActionFilter);
+      if (auditAdminFilter) params.append('adminId', auditAdminFilter);
+      
+      const response = await apiClient.get(`/admin/audit-logs?${params.toString()}`);
+      if (append) {
+        setAuditLogs(prev => [...prev, ...response.logs]);
+      } else {
+        setAuditLogs(response.logs);
+      }
       setAuditPagination(response.pagination);
+      setAuditDistinctActions(response.distinctActions || []);
     } catch (err) {
-      console.error('Failed to load more audit logs:', err);
+      console.error('Failed to fetch audit logs:', err);
     } finally {
       setAuditLoading(false);
     }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'audit-logs' || activeTab === 'overview') {
+      fetchAuditLogs(1, false);
+    }
+  }, [auditActionFilter, auditAdminFilter, activeTab]);
+
+  const loadMoreAuditLogs = async () => {
+    if (!auditPagination || auditPagination.currentPage >= auditPagination.pages || auditLoading) return;
+    
+    const nextPage = auditPagination.currentPage + 1;
+    await fetchAuditLogs(nextPage, true);
   };
 
   const handleDeleteCategory = async (id: string) => {
@@ -312,12 +333,12 @@ const AdminDashboard: React.FC = () => {
   const lowStockItems = inventory.filter(i => i.stockLevel <= i.lowStockThreshold);
 
   return (
-    <div className="space-y-8 min-h-screen">
+    <div className="space-y-8 min-h-screen bg-bg-base">
       {lowStockItems.length > 0 && (
         <motion.div 
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: 'auto', opacity: 1 }}
-          className="bg-brand-danger px-6 py-4 rounded-[24px] flex items-center justify-between gap-4 shadow-xl shadow-brand-danger/20 mb-8 border border-white/10"
+          className="bg-brand-danger px-6 py-4 rounded-xl flex items-center justify-between gap-4 shadow-sm mb-8 border border-white/10"
         >
           <div className="flex items-center gap-4 text-white">
             <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20">
@@ -340,27 +361,27 @@ const AdminDashboard: React.FC = () => {
           </div>
         </motion.div>
       )}
-      <header className="sticky top-0 z-40 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 -mx-4 md:-mx-8 lg:-mx-12 px-4 md:px-8 lg:px-12 py-6 mb-12 shadow-sm transition-colors duration-300">
+      <header className="sticky top-0 z-40 bg-white border-b border-slate-200 -mx-4 md:-mx-8 lg:-mx-12 px-4 md:px-8 lg:px-12 py-6 mb-12 shadow-sm transition-colors duration-300">
         {/* Row 1: Title and Actions */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
           <div className="space-y-2 text-center md:text-left">
-            <h1 className="text-3xl md:text-5xl font-serif font-bold text-slate-900 dark:text-slate-100 tracking-tight">Management</h1>
-            <p className="text-slate-500 dark:text-slate-400 font-medium tracking-tight">System intelligence & resource planning.</p>
+            <h1 className="text-3xl md:text-5xl font-serif font-bold text-[#1A1F2E] tracking-tight">Management</h1>
+            <p className="text-[#64748B] font-medium tracking-tight">System intelligence & resource planning.</p>
           </div>
           
           <div className="flex items-center gap-4 w-full md:w-auto">
             <button 
               onClick={handleExportOrders}
               disabled={isExporting}
-              className="flex-1 md:flex-none border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/50 text-slate-700 dark:text-slate-100 px-6 py-3.5 rounded-2xl font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-3 disabled:opacity-50 text-sm group shadow-sm"
+              className="flex-1 md:flex-none border border-[#1A1F2E] bg-white text-[#1A1F2E] px-6 py-3.5 rounded-xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-3 disabled:opacity-50 text-sm group shadow-sm"
             >
-              {isExporting ? <RefreshCw size={18} className="animate-spin" /> : <Download size={20} className="group-hover:-translate-y-0.5 transition-transform text-brand-secondary" />}
+              {isExporting ? <RefreshCw size={18} className="animate-spin" /> : <Download size={20} className="group-hover:-translate-y-0.5 transition-transform" />}
               <span className="font-black uppercase tracking-widest text-[10px]">Export Data</span>
             </button>
             {activeTab === 'users' ? (
                <button 
                   onClick={() => setIsUserModalOpen(true)}
-                  className="flex-1 md:flex-none bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-8 py-3.5 rounded-2xl font-bold hover:bg-slate-800 dark:hover:bg-white transition-all shadow-xl flex items-center justify-center gap-3 text-sm"
+                  className="flex-1 md:flex-none bg-[#1A1F2E] text-white px-8 py-3.5 rounded-xl font-bold hover:bg-[#1A1F2E]/90 transition-all shadow-sm flex items-center justify-center gap-3 text-sm"
                 >
                   <Plus size={22} />
                   <span className="font-black uppercase tracking-widest text-[10px]">New Personnel</span>
@@ -368,7 +389,7 @@ const AdminDashboard: React.FC = () => {
             ) : (
               <button 
                 onClick={() => setIsCreateModalOpen(true)}
-                className="flex-1 md:flex-none bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-8 py-3.5 rounded-2xl font-bold hover:bg-slate-800 dark:hover:bg-white transition-all shadow-xl flex items-center justify-center gap-3 text-sm"
+                className="flex-1 md:flex-none bg-[#1A1F2E] text-white px-8 py-3.5 rounded-xl font-bold hover:bg-[#1A1F2E]/90 transition-all shadow-sm flex items-center justify-center gap-3 text-sm"
               >
                 <Plus size={22} />
                 <span className="font-black uppercase tracking-widest text-[10px]">New Asset</span>
@@ -402,6 +423,7 @@ const AdminDashboard: React.FC = () => {
               { id: 'overview', label: 'Overview', icon: <BarChart3 size={18} /> },
               ...(user?.role === 'ADMIN' ? [{ id: 'users', label: 'Personnel', icon: <Users size={18} /> }] : []),
               { id: 'inventory', label: 'Inventory', icon: <Package size={18} /> },
+              { id: 'transactions', label: 'Transactions', icon: <Package size={18} /> },
               { id: 'categories', label: 'Collections', icon: <Settings2 size={18} /> },
               { id: 'products', label: 'Catalog', icon: <Coffee size={18} /> },
               ...(user?.role !== 'STAFF' ? [
@@ -412,13 +434,13 @@ const AdminDashboard: React.FC = () => {
               <button 
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-3 flex-shrink-0 border transition-all duration-300 ${
+                className={`px-3 py-4 font-serif text-lg transition-all flex items-center gap-3 flex-shrink-0 border-b-2 transition-all duration-300 ${
                   activeTab === tab.id 
-                    ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 border-slate-900 dark:border-slate-100 shadow-md' 
-                    : 'text-slate-500 border-transparent hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-900/50'
+                    ? 'border-[#1A1F2E] text-[#1A1F2E] font-bold' 
+                    : 'border-transparent text-[#64748B] font-medium hover:text-[#1A1F2E]'
                 }`}
               >
-                <span className={activeTab === tab.id ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'}>{tab.icon}</span>
+                {tab.icon}
                 {tab.label}
               </button>
             ))}
@@ -449,17 +471,17 @@ const AdminDashboard: React.FC = () => {
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <StatCard 
-              icon={<TrendingUp className="text-brand-accent" />} 
+              icon={<TrendingUp className="text-[#1A1F2E]" />} 
               label="Total Revenue" 
               value={`₱${Number(stats?.totalRevenue || 0).toFixed(2)}`} 
             />
             <StatCard 
-              icon={<Package className="text-brand-secondary" />} 
+              icon={<Package className="text-[#1A1F2E]" />} 
               label="Total Orders" 
               value={stats?.totalOrders || 0} 
             />
             <StatCard 
-              icon={<Plus className="text-brand-primary" />} 
+              icon={<Plus className="text-[#1A1F2E]" />} 
               label="Orders Today" 
               value={stats?.todayOrders || 0} 
             />
@@ -521,32 +543,32 @@ const AdminDashboard: React.FC = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
             {/* Sales Chart */}
-            <section className="bg-white/70 dark:bg-slate-900/50 p-10 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-800 transition-all backdrop-blur-md">
-              <h2 className="text-2xl font-serif font-bold text-slate-900 dark:text-slate-100 mb-10 flex items-center gap-3">
-                <BarChart3 size={24} className="text-brand-secondary dark:text-brand-primary" />
+            <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 transition-all">
+              <h2 className="text-2xl font-serif font-bold text-[#1A1F2E] mb-10 flex items-center gap-3">
+                <BarChart3 size={24} className="text-[#1A1F2E]" />
                 Product Demand
               </h2>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={stats?.topProducts || []}>
-                    <XAxis dataKey="name" fontSize={12} axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
+                    <XAxis dataKey="name" fontSize={12} axisLine={false} tickLine={false} tick={{ fill: '#64748B' }} />
                     <YAxis hide />
                     <Tooltip 
-                      cursor={{ fill: 'rgba(0,0,0,0.05)', opacity: 0.1 }}
+                      cursor={{ fill: '#f1f5f9', opacity: 0.4 }}
                       contentStyle={{ 
-                        borderRadius: '20px', 
-                        border: '1px solid rgba(0,0,0,0.05)', 
-                        boxShadow: '0 10px 30px rgba(0,0,0,0.1)', 
-                        padding: '15px',
+                        borderRadius: '12px', 
+                        border: '1px solid #e2e8f0', 
+                        boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', 
+                        padding: '12px',
                         backgroundColor: 'white',
-                        color: '#0f172a'
+                        color: '#1A1F2E'
                       }}
-                      itemStyle={{ color: '#0f172a' }}
-                      labelStyle={{ color: '#64748b', fontWeight: 'bold', marginBottom: '4px' }}
+                      itemStyle={{ color: '#1A1F2E' }}
+                      labelStyle={{ color: '#64748B', fontWeight: 'bold', marginBottom: '4px' }}
                     />
-                    <Bar dataKey="quantity" fill="#C8A97E" radius={[12, 12, 0, 0]} barSize={40}>
+                    <Bar dataKey="quantity" fill="#1A1F2E" radius={[4, 4, 0, 0]} barSize={40}>
                       {stats?.topProducts?.map((_entry:any, index:number) => (
-                        <Cell key={`cell-${index}`} fill={index === 0 ? '#4A3728' : '#C8A97E'} />
+                        <Cell key={`cell-${index}`} fill={index === 0 ? '#1A1F2E' : '#64748B'} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -555,354 +577,316 @@ const AdminDashboard: React.FC = () => {
             </section>
 
             {/* Inventory Table */}
-            <section className="bg-white/70 dark:bg-slate-900/50 p-10 rounded-[32px] shadow-sm border border-slate-200 dark:border-slate-800 transition-all backdrop-blur-md">
+            <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 transition-all">
               <div className="flex justify-between items-center mb-10">
-                <h2 className="text-2xl font-serif font-bold text-slate-900 dark:text-slate-100 flex items-center gap-3">
-                  <Package size={24} className="text-brand-secondary dark:text-brand-primary" />
+                <h2 className="text-2xl font-serif font-bold text-[#1A1F2E] flex items-center gap-3">
+                  <Package size={24} className="text-[#1A1F2E]" />
                   Stock Inventory
                 </h2>
                 <button 
                   onClick={() => setIsInventoryModalOpen(true)}
-                  className="w-10 h-10 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-xl flex items-center justify-center hover:bg-slate-800 dark:hover:bg-white transition-all shadow-sm"
+                  className="w-10 h-10 bg-[#1A1F2E] text-white rounded-xl flex items-center justify-center hover:bg-[#1A1F2E]/90 transition-all shadow-sm"
                 >
                   <Plus size={20} />
                 </button>
               </div>
-              <div className="space-y-5 max-h-[400px] overflow-y-auto pr-4 no-scrollbar border-t border-slate-100 dark:border-slate-800 pt-5">
-                {inventory.map((item) => {
+              <div className="space-y-5 max-h-[400px] overflow-y-auto pr-4 no-scrollbar border-t border-slate-100 pt-5">
+                {inventory.map((item, index) => {
                   const isLow = item.stockLevel <= item.lowStockThreshold;
                   const isCritical = item.stockLevel === 0;
                   return (
                     <div 
                       key={item.id} 
-                      className={`flex flex-col gap-2 p-4 rounded-2xl transition-all border ${
+                      className={`flex flex-col gap-2 p-4 rounded-xl transition-all border ${
+                        index % 2 === 0 ? 'bg-white' : 'bg-slate-50'
+                      } ${
                         isCritical
-                          ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900/50'
+                          ? 'border-red-200 bg-red-50'
                           : isLow 
-                            ? 'bg-orange-50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-900/30' 
-                            : 'bg-slate-50/50 dark:bg-slate-800/30 border-transparent dark:border-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800/50'
+                            ? 'border-orange-200 bg-orange-50' 
+                            : 'border-transparent hover:bg-slate-100'
                       }`}
                     >
                       <div className="flex justify-between items-center text-sm">
                         <div className="flex items-center gap-3">
-                          <div className={`w-2 h-2 rounded-full ${isLow ? 'bg-red-500 animate-pulse' : 'bg-brand-secondary'}`}></div>
-                          <span className="font-bold text-slate-900 dark:text-slate-200">{item.name}</span>
+                          <div className={`w-2 h-2 rounded-full ${isLow ? 'bg-red-500 animate-pulse' : 'bg-[#1A1F2E]'}`}></div>
+                          <span className="font-bold text-[#1A1F2E]">{item.name}</span>
                           {isLow && (
                             <span className={`text-[8px] text-white px-2 py-0.5 rounded-md font-black uppercase tracking-tight shadow-sm ${isCritical ? 'bg-red-500 animate-pulse' : 'bg-orange-500'}`}>
                               {isCritical ? 'Depleted' : 'Low Stock'}
                             </span>
                           )}
                         </div>
-                        <span className={`font-bold ${isLow ? 'text-red-500' : 'text-slate-500 dark:text-slate-400'}`}>
+                        <span className={`font-bold ${isLow ? 'text-red-600' : 'text-[#64748B]'}`}>
                           {item.stockLevel} {item.unit}
                         </span>
                       </div>
-                      <div className="w-full bg-slate-200 dark:bg-slate-700/50 h-2 rounded-full overflow-hidden">
+                      
+                      {/* Linked Products Feedback */}
+                      {((item as any).products?.length > 0 || (item as any).customizations?.length > 0) && (
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {(item as any).products?.map((p: any) => (
+                            <span key={p.productId} className="text-[10px] bg-slate-100 text-[#64748B] px-2 py-0.5 rounded font-medium border border-slate-200">
+                              {p.product.name}
+                            </span>
+                          ))}
+                          {(item as any).customizations?.map((c: any) => (
+                            <span key={c.choiceId} className="text-[10px] bg-brand-primary/5 text-brand-primary px-2 py-0.5 rounded font-medium border border-brand-primary/10">
+                              {c.choice.group.name}: {c.choice.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mt-2">
                         <motion.div 
                           initial={{ width: 0 }}
                           animate={{ width: `${Math.min(100, (item.stockLevel / (item.lowStockThreshold * 5)) * 100)}%` }}
-                          className={`h-full ${isLow ? 'bg-brand-danger' : 'bg-brand-secondary active:glow'}`}
+                          className={`h-full ${isLow ? 'bg-red-500' : 'bg-[#1A1F2E]'}`}
                         />
                       </div>
                     </div>
                   );
                 })}
               </div>
-              <button className="w-full mt-10 py-4 border-2 border-brand-primary dark:border-slate-700 text-brand-primary dark:text-slate-200 rounded-2xl text-xs font-bold uppercase tracking-widest hover:bg-brand-primary dark:hover:bg-slate-800 hover:text-white transition-all">
+              <button className="w-full mt-10 py-4 border-2 border-[#1A1F2E] text-[#1A1F2E] rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#1A1F2E] hover:text-white transition-all">
                 Replenish Stock
               </button>
             </section>
           </div>
         </>
       ) : activeTab === 'users' ? (
-        <section className="space-y-10">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <section className="space-y-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
             <div className="space-y-2">
-              <h2 className="text-3xl md:text-4xl font-serif font-bold text-slate-900 dark:text-slate-100 tracking-tight transition-colors">Personnel</h2>
-              <p className="text-slate-500 dark:text-slate-400 font-medium transition-colors">Manage system access tiers and security clearances.</p>
-            </div>
-            <div className="bg-white/70 dark:bg-slate-900/50 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-2xl px-6 py-3 flex items-center gap-4 shadow-sm transition-colors">
-               <div className="w-10 h-10 bg-brand-secondary/10 dark:bg-brand-secondary/5 rounded-xl flex items-center justify-center text-brand-secondary border border-brand-secondary/20 transition-colors">
-                 <Shield size={20} />
-               </div>
-               <div className="flex flex-col">
-                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-500 transition-colors">Active Directory</span>
-                 <span className="text-lg font-black text-slate-900 dark:text-slate-200 transition-colors">{users.length} Users</span>
-               </div>
+              <h2 className="text-3xl md:text-4xl font-serif font-bold text-[#1A1F2E] tracking-tight">Personnel</h2>
+              <p className="text-[#64748B] font-medium transition-colors">Manage system access tiers and security clearances.</p>
             </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            <AnimatePresence mode="popLayout">
-              {users.map((u) => (
-                <motion.div 
-                  key={u.id}
-                  layout
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="bg-white/70 dark:bg-slate-900/50 backdrop-blur-md rounded-[24px] border border-slate-200 dark:border-slate-800 p-8 shadow-sm relative overflow-hidden group hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-500 flex flex-col justify-between"
-                >
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-slate-50 dark:bg-slate-800/20 rounded-bl-full flex items-center justify-end pr-5 pt-5 text-slate-200 dark:text-slate-700 group-hover:text-brand-secondary/40 transition-colors">
-                    {u.role === 'ADMIN' ? <Shield size={28} /> : <UserIcon size={28} />}
-                  </div>
-
-                  <div className="relative z-10">
-                    <div className="flex items-center gap-5 mb-8">
-                      <div className="relative">
-                        <div className="w-16 h-16 rounded-2xl bg-white dark:bg-slate-950 flex items-center justify-center text-slate-900 dark:text-slate-200 font-serif font-bold text-2xl border border-slate-200 dark:border-slate-800 shadow-sm group-hover:scale-105 transition-transform duration-500">
-                          {u.name?.[0] || u.email[0].toUpperCase()}
-                        </div>
-                        {u.role === 'ADMIN' && (
-                          <div className="absolute -top-2 -right-2 w-6 h-6 bg-brand-secondary rounded-full flex items-center justify-center text-white border-2 border-white dark:border-slate-900 shadow-md">
-                            <Shield size={10} />
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-12">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 border-b border-slate-200">
+                    <th className="px-6 py-4 text-xs font-bold font-serif text-[#1A1F2E] uppercase tracking-widest">Employee/User</th>
+                    <th className="px-6 py-4 text-xs font-bold font-serif text-[#1A1F2E] uppercase tracking-widest">Authority Level</th>
+                    <th className="px-6 py-4 text-xs font-bold font-serif text-[#1A1F2E] uppercase tracking-widest text-right">Clearance Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {users.map((u, index) => (
+                    <tr key={u.id} className={`${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-slate-50 transition-colors`}>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-full bg-[#1A1F2E] text-white flex items-center justify-center font-bold text-sm">
+                            {u.name?.[0] || u.email[0].toUpperCase()}
                           </div>
-                        )}
-                      </div>
-                      <div className="space-y-0.5">
-                        <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight group-hover:text-brand-secondary transition-colors line-clamp-1">{u.name || 'Personnel'}</h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium font-mono opacity-80 line-clamp-1">{u.email}</p>
-                      </div>
-                    </div>
-
-                    <div className="mb-8">
-                       <RoleBadge role={u.role} loading={updatingUserId === u.id} />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-center pt-6 border-t border-slate-100 dark:border-slate-800/50 transition-colors">
-                    <div className="flex gap-1">
-                      {['CUSTOMER', 'STAFF', 'ADMIN']
-                        .filter(r => r !== u.role)
-                        .map(r => (
-                          <button
-                            key={r}
-                            onClick={() => handleUpdateRole(u.id, r as Role)}
-                            disabled={updatingUserId === u.id}
-                            className="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-500 hover:text-brand-secondary dark:hover:text-brand-secondary hover:bg-slate-50 dark:hover:bg-slate-800 transition-all border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+                          <div>
+                            <p className="font-bold text-[#1A1F2E]">{u.name || 'Anonymous User'}</p>
+                            <p className="text-xs text-[#64748B] font-mono">{u.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <RoleBadge role={u.role} loading={updatingUserId === u.id} />
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-3">
+                          <div className="flex gap-2">
+                            {['CUSTOMER', 'STAFF', 'ADMIN']
+                              .filter(r => r !== u.role)
+                              .map(r => (
+                                <button
+                                  key={r}
+                                  onClick={() => handleUpdateRole(u.id, r as Role)}
+                                  disabled={updatingUserId === u.id}
+                                  className="px-2 py-1 rounded text-[10px] font-bold text-[#64748B] hover:text-[#1A1F2E] hover:bg-slate-200 transition-colors border border-slate-200"
+                                >
+                                  {r[0]}{r.slice(1).toLowerCase()}
+                                </button>
+                              ))
+                            }
+                          </div>
+                          <button 
+                            onClick={() => setEditingUser(u)}
+                            className="p-2 text-[#64748B] hover:text-[#1A1F2E] transition-colors"
                           >
-                            Set {r}
+                            <Edit3 size={16} />
                           </button>
-                        ))
-                      }
-                    </div>
-                    <div className="flex gap-2">
-                       <button 
-                        onClick={() => setEditingUser(u)}
-                        className="w-10 h-10 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm"
-                        title="Edit Profile"
-                      >
-                        <Edit3 size={18} />
-                      </button>
-                      <button 
-                        onClick={() => setUserToDelete(u)}
-                        disabled={u.id === user?.id || updatingUserId === u.id}
-                        className="w-10 h-10 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 transition-all rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm disabled:opacity-0 pointer-events-none md:pointer-events-auto"
-                        title="Delete User"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
+                          <button 
+                            onClick={() => setUserToDelete(u)}
+                            disabled={u.id === user?.id || updatingUserId === u.id}
+                            className="p-2 text-[#64748B] hover:text-red-600 disabled:opacity-0 transition-colors"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
 
       ) : activeTab === 'inventory' ? (
         <section className="space-y-12">
-           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
             <div className="space-y-2">
-              <h2 className="text-3xl md:text-4xl font-serif font-bold text-slate-900 dark:text-slate-100 tracking-tight transition-colors">Resource Pipeline</h2>
-              <p className="text-slate-500 dark:text-slate-400 font-medium tracking-tight transition-colors">Calibrate and maintain the essential compounds of production.</p>
+              <h2 className="text-3xl md:text-4xl font-serif font-bold text-[#1A1F2E] tracking-tight">Resource Pipeline</h2>
+              <p className="text-[#64748B] font-medium tracking-tight">System intelligence & resource planning.</p>
             </div>
             <button 
               onClick={() => setIsInventoryModalOpen(true)}
-              className="bg-slate-900 dark:bg-brand-primary text-white px-10 py-5 rounded-[24px] font-bold hover:bg-slate-800 dark:hover:bg-brand-secondary transition-all shadow-md flex items-center justify-center gap-4 border border-transparent dark:border-brand-primary/20"
+              className="bg-[#1A1F2E] text-white px-10 py-4 rounded-xl font-bold hover:bg-[#1A1F2E]/90 transition-all shadow-sm flex items-center justify-center gap-4"
             >
               <Plus size={20} />
-              <span className="font-black uppercase tracking-widest text-xs">Register Resource</span>
+              <span className="font-black uppercase tracking-widest text-[10px]">Register Resource</span>
             </button>
           </div>
- 
-          <div className="bg-white/70 dark:bg-slate-900/50 backdrop-blur-md p-8 rounded-[32px] border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden transition-colors">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-brand-secondary/5 rounded-full blur-[100px] opacity-20 pointer-events-none" />
-            <div className="relative group">
-              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 group-focus-within:text-brand-secondary transition-colors" size={24} />
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-8">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
               <input 
                 type="text"
                 placeholder="Scan inventory records..."
                 value={inventorySearch}
                 onChange={(e) => setInventorySearch(e.target.value)}
-                className="w-full pl-16 pr-6 py-5 bg-slate-50/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 focus:border-brand-secondary focus:ring-4 ring-brand-secondary/5 rounded-2xl outline-none transition-all font-bold text-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 shadow-inner"
+                className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 focus:border-[#1A1F2E] rounded-xl outline-none transition-all font-bold text-[#1A1F2E] placeholder:text-[#64748B]/50 shadow-inner"
               />
             </div>
           </div>
- 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <AnimatePresence mode="popLayout">
-              {filteredInventory.map((item) => {
-              const isLow = item.stockLevel <= item.lowStockThreshold;
-              const isCritical = item.stockLevel === 0;
-              return (
-                <motion.div 
-                  layout
-                  key={item.id}
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className={`bg-white/70 dark:bg-slate-900/50 backdrop-blur-md rounded-[28px] border p-8 shadow-sm relative overflow-hidden group hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-500 flex flex-col justify-between ${
-                    isLow ? 'border-red-200 dark:border-red-900/40' : 'border-slate-200 dark:border-slate-800'
-                  }`}
-                >
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-slate-50 dark:bg-slate-800/10 rounded-bl-[40px] flex items-center justify-end pr-5 pt-5 text-slate-200 dark:text-slate-800 group-hover:text-brand-secondary/20 transition-colors">
-                     <Package size={28} />
-                  </div>
-
-                  <div className="relative z-10 flex flex-col h-full">
-                    <div className="flex items-center gap-5 mb-8">
-                       <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-500 group-hover:scale-105 shadow-sm ${isLow ? 'bg-red-50 dark:bg-red-950/40 text-red-500 dark:text-red-500 border border-red-100 dark:border-red-900/30' : 'bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 border border-slate-100 dark:border-slate-800'}`}>
-                         <Package size={32} />
-                       </div>
-                       <div className="flex-1 min-w-0">
-                         <h3 className={`text-xl font-bold tracking-tight truncate transition-colors ${isLow ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100 group-hover:text-brand-secondary'}`}>{item.name}</h3>
-                         <div className="flex items-center gap-2 mt-1">
-                           <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-500">Asset Ref #{(item.id as string).slice(0, 4).toUpperCase()}</span>
-                           {isLow && (
-                             <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-red-500 dark:text-red-500 animate-pulse">
-                               <AlertTriangle size={10} /> {isCritical ? 'Depleted' : 'Critical'}
-                             </span>
-                           )}
-                         </div>
-                       </div>
-                    </div>
- 
-                    <div className="flex-1 mb-8">
-                       <div className="flex items-baseline gap-2 mb-3">
-                         <span className={`text-5xl font-serif font-black tracking-tighter ${isLow ? 'text-red-500 dark:text-red-500' : 'text-slate-900 dark:text-slate-100'}`}>
-                            {item.stockLevel}
-                         </span>
-                         <span className="text-sm font-black uppercase tracking-widest text-slate-500 dark:text-slate-500 font-sans">{item.unit}</span>
-                       </div>
-                       
-                       <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-950 rounded-full overflow-hidden border border-slate-200/50 dark:border-slate-800/50">
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${Math.min((item.stockLevel / (item.lowStockThreshold * 3)) * 100, 100)}%` }}
-                            className={`h-full rounded-full transition-all duration-1000 ${isLow ? 'bg-gradient-to-r from-red-600 to-red-400 shadow-[0_0_10px_rgba(239,68,68,0.2)]' : 'bg-brand-primary'}`}
-                          />
-                       </div>
-                       <div className="flex justify-between items-center mt-3">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-600 transition-colors">Threshold: {item.lowStockThreshold} {item.unit}</p>
-                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-700 italic font-mono transition-colors">Sync: {new Date(item.updatedAt).toLocaleTimeString()}</p>
-                       </div>
-                    </div>
-
-                    {/* Usage Stats (New) */}
-                    {((item.products && item.products.length > 0) || (item.customizations && item.customizations.length > 0)) && (
-                      <div className="mb-6 p-4 bg-slate-50/50 dark:bg-slate-950/50 rounded-2xl border border-slate-100 dark:border-slate-800/50 transition-colors">
-                         <div className="flex items-center gap-2 mb-3">
-                            <div className="w-1 h-1 rounded-full bg-brand-secondary"></div>
-                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-500 transition-colors">Asset Usage</span>
-                         </div>
-                         <div className="flex flex-wrap gap-1.5">
-                            {item.products?.slice(0, 2).map((p: any) => (
-                              <span key={p.id} className="text-[8px] bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-400 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 font-bold uppercase tracking-tight transition-colors">
-                                {p.product?.name}
+          
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-12">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 border-b border-slate-200">
+                    <th className="px-6 py-4 text-xs font-bold font-serif text-[#1A1F2E] uppercase tracking-widest">Resource Name</th>
+                    <th className="px-6 py-4 text-xs font-bold font-serif text-[#1A1F2E] uppercase tracking-widest text-center">In Stock</th>
+                    <th className="px-6 py-4 text-xs font-bold font-serif text-[#1A1F2E] uppercase tracking-widest text-center">Efficiency Level</th>
+                    <th className="px-6 py-4 text-xs font-bold font-serif text-[#1A1F2E] uppercase tracking-widest text-right">Pipeline Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredInventory.map((item, index) => {
+                    const isLow = item.stockLevel <= item.lowStockThreshold;
+                    const stockPercent = Math.min(100, (item.stockLevel / (item.lowStockThreshold * 3)) * 100);
+                    return (
+                      <tr key={item.id} className={`${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-slate-50 transition-colors`}>
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-[#1A1F2E]">{item.name}</div>
+                          {isLow && (
+                            <span className="text-[10px] font-black text-red-600 uppercase tracking-tighter bg-red-50 px-2 py-0.5 rounded border border-red-100">Low Stock Alert</span>
+                          )}
+                          
+                          {/* Linked Products Feedback - Requirement 4 */}
+                          <div className="flex flex-wrap gap-1 mt-2">
+                             {(item as any).products?.map((p: any) => (
+                               <span key={p.productId} className="text-[9px] bg-slate-100 text-[#64748B] px-1.5 py-0.5 rounded border border-slate-200">
+                                 {p.product.name}
+                               </span>
+                             ))}
+                             {(item as any).customizations?.map((c: any) => (
+                               <span key={c.choiceId} className="text-[9px] bg-brand-primary/5 text-brand-primary px-1.5 py-0.5 rounded border border-brand-primary/10">
+                                 {c.choice.group.name}: {c.choice.name}
+                               </span>
+                             ))}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex flex-col">
+                            <span className={`font-mono font-bold ${isLow ? 'text-red-600 font-black' : 'text-[#1A1F2E]'}`}>
+                              {item.stockLevel} <span className="text-[10px] uppercase font-bold text-[#64748B]">{item.unit}</span>
+                            </span>
+                            {item.projectedStock !== undefined && item.projectedStock !== item.stockLevel && (
+                              <span className="text-[9px] text-[#64748B] font-bold" title="Projected after active carts">
+                                Projected: {item.projectedStock} {item.unit}
                               </span>
-                            ))}
-                            {item.customizations?.slice(0, 2).map((c: any) => (
-                              <span key={c.id} className="text-[8px] bg-white dark:bg-slate-950 text-brand-secondary/70 dark:text-brand-secondary/70 px-2 py-1 rounded-lg border border-brand-secondary/20 dark:border-brand-secondary/10 font-bold uppercase tracking-tight transition-colors">
-                                {c.choice?.name}
-                              </span>
-                            ))}
-                         </div>
-                      </div>
-                    )}
- 
-                    <div className="pt-4 flex gap-2">
-                      <button 
-                        onClick={() => {
-                          const amount = prompt(`Enter amount to add for ${item.name}:`, '10');
-                          if (amount && !isNaN(parseInt(amount))) {
-                            handleRestock(item.id, parseInt(amount));
-                          }
-                        }}
-                        className={`flex-1 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-3 border shadow-sm ${
-                          isLow 
-                            ? 'bg-brand-primary text-white border-brand-primary/20 hover:bg-brand-secondary shadow-brand-primary/20' 
-                            : 'bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                        }`}
-                      >
-                        <RefreshCw size={14} className={isLow ? 'animate-spin' : ''} />
-                        Replenish
-                      </button>
-                    </div>
-                    <div className="mt-4 flex gap-2 pt-6 border-t border-slate-100 dark:border-slate-800/50 transition-colors">
-                      <button 
-                        onClick={() => setEditingInventory(item)}
-                        className="flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest bg-transparent text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-all flex items-center justify-center gap-2"
-                      >
-                        <Edit3 size={14} />
-                        Edit
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteInventory(item.id)}
-                        className="px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest bg-red-50 dark:bg-red-950/10 text-red-500/50 dark:text-red-500/50 border border-red-100 dark:border-red-900/10 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all flex items-center justify-center gap-2"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-            </AnimatePresence>
- 
-            {filteredInventory.length === 0 && (
-              <div className="col-span-full py-32 text-center bg-white/50 dark:bg-slate-900/30 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-[40px] transition-colors">
-                <Package size={64} className="mx-auto mb-6 opacity-10 text-slate-400 dark:text-slate-500 transition-colors" />
-                <p className="font-serif text-2xl italic text-slate-500 dark:text-slate-500 opacity-40 transition-colors">No resource records matched the query.</p>
-                {inventorySearch && (
-                  <button 
-                    onClick={() => setInventorySearch('')}
-                    className="mt-6 text-xs font-black uppercase tracking-widest text-brand-secondary hover:text-brand-primary"
-                  >
-                    Clear Filter Pipeline
-                  </button>
-                )}
-              </div>
-            )}
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="w-32 mx-auto bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full transition-all duration-1000 ${isLow ? 'bg-red-500' : 'bg-[#1A1F2E]'}`}
+                              style={{ width: `${stockPercent}%` }}
+                            />
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-3 text-[#64748B]">
+                            <button 
+                              onClick={() => {
+                                const amount = prompt(`Enter amount to add for ${item.name}:`, '10');
+                                if (amount && !isNaN(parseInt(amount))) {
+                                  handleRestock(item.id, parseInt(amount));
+                                }
+                              }}
+                              className="p-2 hover:text-[#1A1F2E] transition-colors"
+                              title="Replenish"
+                            >
+                               <RefreshCw size={16} />
+                            </button>
+                             <button 
+                              onClick={() => setEditingInventory(item)}
+                              className="p-2 hover:text-[#1A1F2E] transition-colors"
+                              title="Edit"
+                            >
+                              <Edit3 size={16} />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteInventory(item.id)}
+                              className="p-2 hover:text-red-600 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredInventory.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-20 text-center">
+                        <Package size={48} className="mx-auto mb-4 text-slate-200" />
+                        <p className="font-serif text-xl italic text-slate-400">No resource records matched the query.</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       ) : activeTab === 'products' ? (
-        <section className="space-y-10">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <section className="space-y-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
             <div className="space-y-2">
-              <h2 className="text-3xl md:text-4xl font-serif font-bold text-slate-900 dark:text-slate-100 tracking-tight transition-colors">Gallery</h2>
-              <p className="text-slate-500 dark:text-slate-400 font-medium tracking-tight transition-colors">Curating your coffee masterpieces and catalog offerings.</p>
+              <h2 className="text-3xl md:text-4xl font-serif font-bold text-[#1A1F2E] tracking-tight">Gallery</h2>
+              <p className="text-[#64748B] font-medium tracking-tight transition-colors">Curating your coffee masterpieces and catalog offerings.</p>
             </div>
-            <div className="bg-white/70 dark:bg-slate-900/50 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-2xl px-6 py-3 flex items-center gap-4 shadow-sm transition-colors">
-               <div className="w-10 h-10 bg-brand-primary/10 dark:bg-brand-primary/5 rounded-xl flex items-center justify-center text-brand-primary border border-brand-primary/20 transition-colors">
-                 <Coffee size={20} />
-               </div>
-               <div className="flex flex-col">
-                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-500 transition-colors">Live Catalog</span>
-                 <span className="text-lg font-black text-slate-900 dark:text-slate-200 transition-colors">{filteredProducts.length} Items</span>
-               </div>
-            </div>
+            <button 
+              onClick={() => setIsCreateModalOpen(true)}
+              className="bg-[#1A1F2E] text-white px-10 py-4 rounded-xl font-bold hover:bg-[#1A1F2E]/90 transition-all shadow-sm flex items-center justify-center gap-4"
+            >
+              <Plus size={20} />
+              <span className="font-black uppercase tracking-widest text-[10px]">New Masterpiece</span>
+            </button>
           </div>
  
-          <div className="flex flex-col xl:flex-row gap-6 bg-white/70 dark:bg-slate-900/50 backdrop-blur-md p-6 rounded-[32px] border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
-            <div className="flex-1 relative group">
-              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 group-focus-within:text-brand-secondary transition-colors" size={20} />
+          <div className="flex flex-col xl:flex-row gap-6 bg-white p-6 rounded-xl border border-slate-200 shadow-sm transition-all mb-8">
+            <div className="flex-1 relative">
+              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
               <input 
                 type="text"
                 placeholder="Search catalog..."
                 value={productSearch}
                 onChange={(e) => setProductSearch(e.target.value)}
-                className="w-full pl-14 pr-6 py-4 bg-slate-50/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 focus:border-brand-secondary focus:ring-4 ring-brand-secondary/5 rounded-2xl outline-none transition-all font-bold text-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 shadow-inner"
+                className="w-full pl-14 pr-6 py-4 bg-slate-50 border border-slate-200 focus:border-[#1A1F2E] rounded-xl outline-none transition-all font-bold text-lg text-[#1A1F2E] placeholder:text-[#64748B]/50 shadow-inner"
               />
             </div>
             
@@ -915,7 +899,7 @@ const AdminDashboard: React.FC = () => {
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -10 }}
                       onClick={() => scrollCategories('left')}
-                      className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white dark:bg-slate-900/90 backdrop-blur-md border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-full flex items-center justify-center shadow-lg transition-colors"
+                      className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white border border-slate-200 text-[#1A1F2E] rounded-full flex items-center justify-center shadow-sm"
                     >
                       <ChevronLeft size={16} />
                     </motion.button>
@@ -930,8 +914,8 @@ const AdminDashboard: React.FC = () => {
                     onClick={() => setProductCategoryFilter('all')}
                     className={`px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex-shrink-0 border ${
                       productCategoryFilter === 'all'
-                        ? 'bg-slate-900 dark:bg-brand-primary text-white border-slate-900 dark:border-brand-primary shadow-md'
-                        : 'text-slate-500 dark:text-slate-500 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-600 hover:text-slate-900 dark:hover:text-slate-300 hover:bg-white dark:hover:bg-slate-800'
+                        ? 'bg-[#1A1F2E] text-white border-[#1A1F2E] shadow-sm'
+                        : 'text-[#64748B] border-slate-200 hover:border-[#1A1F2E] hover:text-[#1A1F2E] hover:bg-slate-50'
                     }`}
                   >
                     All Categories
@@ -942,8 +926,8 @@ const AdminDashboard: React.FC = () => {
                       onClick={() => setProductCategoryFilter(cat.id)}
                       className={`px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex-shrink-0 border ${
                         productCategoryFilter === cat.id
-                          ? 'bg-slate-900 dark:bg-brand-primary text-white border-slate-900 dark:border-brand-primary shadow-md'
-                          : 'text-slate-500 dark:text-slate-500 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-600 hover:text-slate-900 dark:hover:text-slate-300 hover:bg-white dark:hover:bg-slate-800'
+                          ? 'bg-[#1A1F2E] text-white border-[#1A1F2E] shadow-sm'
+                          : 'text-[#64748B] border-slate-200 hover:border-[#1A1F2E] hover:text-[#1A1F2E] hover:bg-slate-50'
                       }`}
                     >
                       {cat.name}
@@ -984,13 +968,13 @@ const AdminDashboard: React.FC = () => {
               ))}
             </AnimatePresence>
             {filteredProducts.length === 0 && (
-              <div className="col-span-full py-32 bg-white/50 dark:bg-slate-900/30 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-[40px] text-center transition-colors">
-                <Search size={64} className="mx-auto mb-6 opacity-10 text-slate-400 dark:text-slate-500 transition-colors" />
-                <p className="font-serif text-2xl italic text-slate-500 dark:text-slate-500 opacity-40 transition-colors">The catalog is silent. No matches found.</p>
+              <div className="col-span-full py-32 bg-white border-2 border-dashed border-slate-100 rounded-xl text-center">
+                <Search size={64} className="mx-auto mb-6 text-slate-200" />
+                <p className="font-serif text-2xl italic text-slate-400">The catalog is silent. No matches found.</p>
                 {(productSearch || productCategoryFilter !== 'all') && (
                   <button 
                     onClick={() => { setProductSearch(''); setProductCategoryFilter('all'); }}
-                    className="mt-6 text-xs font-black uppercase tracking-widest text-brand-secondary hover:text-brand-primary"
+                    className="mt-6 text-[10px] font-black uppercase tracking-widest text-[#1A1F2E] hover:text-[#64748B]"
                   >
                     Clear Filter Pipeline
                   </button>
@@ -1000,18 +984,18 @@ const AdminDashboard: React.FC = () => {
           </div>
         </section>
       ) : activeTab === 'categories' ? (
-        <section className="space-y-10">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <section className="space-y-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
             <div className="space-y-2">
-              <h2 className="text-3xl md:text-4xl font-serif font-bold text-slate-900 dark:text-slate-100 tracking-tight transition-colors">Collections</h2>
-              <p className="text-slate-500 dark:text-slate-400 font-medium transition-colors">Architect your menu hierarchy and grouping logic.</p>
+              <h2 className="text-3xl md:text-4xl font-serif font-bold text-[#1A1F2E] tracking-tight">Collections</h2>
+              <p className="text-[#64748B] font-medium tracking-tight transition-colors">Architect your menu hierarchy and grouping logic.</p>
             </div>
             <button 
               onClick={() => {
                 setEditingCategory(null);
                 setIsCategoryModalOpen(true);
               }}
-              className="bg-slate-900 dark:bg-brand-primary text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-3 shadow-md hover:bg-slate-800 dark:hover:bg-brand-secondary transition-all border border-transparent dark:border-brand-primary/20"
+              className="bg-[#1A1F2E] text-white px-10 py-4 rounded-xl font-bold flex items-center gap-3 shadow-sm hover:bg-[#1A1F2E]/90 transition-all"
             >
               <Plus size={22} />
               <span className="font-black uppercase tracking-widest text-[10px]">New Collection</span>
@@ -1033,18 +1017,18 @@ const AdminDashboard: React.FC = () => {
         </section>
 
       ) : activeTab === 'variations' ? (
-        <section className="space-y-8">
-          <div className="flex justify-between items-center">
-            <div className="space-y-1">
-              <h2 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100 tracking-tight transition-colors">Customization Groups</h2>
-              <p className="text-slate-500 dark:text-slate-400 font-medium transition-colors">Manage milk types, sweetness, and other drink variations.</p>
+        <section className="space-y-6">
+          <div className="flex justify-between items-center mb-8">
+            <div className="space-y-2">
+              <h2 className="text-3xl md:text-4xl font-serif font-bold text-[#1A1F2E] tracking-tight">Add-ons</h2>
+              <p className="text-[#64748B] font-medium tracking-tight transition-colors">Manage milk types, sweetness, and other drink variations.</p>
             </div>
             <button 
               onClick={() => {
                 setEditingCustomizationGroup(null);
                 setIsCustomizationModalOpen(true);
               }}
-              className="bg-slate-900 dark:bg-brand-primary text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-3 shadow-md hover:bg-slate-800 dark:hover:bg-brand-secondary transition-all border border-transparent dark:border-brand-primary/20"
+              className="bg-[#1A1F2E] text-white px-10 py-4 rounded-xl font-bold flex items-center gap-3 shadow-sm hover:bg-[#1A1F2E]/90 transition-all"
             >
               <Plus size={20} />
               <span className="font-black uppercase tracking-widest text-[10px]">New Group</span>
@@ -1056,18 +1040,18 @@ const AdminDashboard: React.FC = () => {
               <motion.div 
                 key={group.id}
                 layout
-                className="bg-white/70 dark:bg-slate-900/50 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-[32px] p-8 shadow-sm space-y-8 transition-all"
+                className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-8 transition-all"
               >
                 <div className="flex justify-between items-start">
                   <div className="space-y-2">
                     <div className="flex items-center gap-3">
-                      <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight transition-colors">{group.name}</h3>
+                      <h3 className="text-2xl font-bold text-[#1A1F2E] tracking-tight">{group.name}</h3>
                       {group.required && (
-                        <span className="bg-brand-secondary/10 dark:bg-brand-secondary/5 text-brand-secondary px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border border-brand-secondary/20">Required</span>
+                        <span className="bg-[#1A1F2E]/5 text-[#1A1F2E] px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border border-slate-200">Required</span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold flex items-center gap-2 transition-colors">
-                      <LinkIcon size={14} className="text-brand-primary dark:text-brand-secondary" />
+                    <p className="text-xs text-[#64748B] font-bold flex items-center gap-2 transition-colors">
+                      <LinkIcon size={14} className="text-[#1A1F2E]" />
                       Linked to {group.products.length} products
                     </p>
                   </div>
@@ -1077,7 +1061,7 @@ const AdminDashboard: React.FC = () => {
                        setEditingCustomizationGroup(group);
                        setIsCustomizationModalOpen(true);
                      }}
-                     className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 transition-all shadow-sm"
+                     className="p-2.5 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-400 hover:text-[#1A1F2E] transition-all shadow-sm"
                    >
                        <Edit3 size={18} />
                      </button>
@@ -1088,7 +1072,7 @@ const AdminDashboard: React.FC = () => {
                           fetchData();
                         }
                       }}
-                      className="p-2.5 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/20 rounded-xl text-red-500 hover:text-white hover:bg-red-500 transition-all shadow-sm"
+                      className="p-2.5 bg-red-50 border border-red-100 rounded-xl text-red-500 hover:text-white hover:bg-red-500 transition-all shadow-sm"
                     >
                        <Trash2 size={18} />
                      </button>
@@ -1096,7 +1080,7 @@ const AdminDashboard: React.FC = () => {
                 </div>
  
                 <div className="space-y-4">
-                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 pb-3 transition-colors">Choices</p>
+                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] border-b border-slate-100 pb-3">Choices</p>
                    <div className="grid grid-cols-1 gap-3">
                       {group.choices.map((choice: any) => (
                         <ChoiceRow key={choice.id} choice={choice} onSuccess={fetchData} />
@@ -1106,70 +1090,96 @@ const AdminDashboard: React.FC = () => {
                 </div>
  
                 <div className="space-y-4">
-                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-400 transition-colors">Associated Products</p>
+                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B]">Associated Products</p>
                    <div className="flex flex-wrap gap-2">
                       {group.products.map((p: any) => (
-                        <span key={p.productId} className="bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800 px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-2 hover:bg-white dark:hover:bg-slate-900 transition-all cursor-default shadow-sm transition-colors">
+                        <span key={p.productId} className="bg-slate-50 border border-slate-100 px-4 py-2 rounded-xl text-xs font-bold text-[#64748B] flex items-center gap-2 hover:bg-white transition-all cursor-default shadow-sm font-sans">
                            {p.product.name}
                         </span>
                       ))}
-                      {group.products.length === 0 && <span className="text-xs italic text-slate-400 dark:text-slate-500 px-1 transition-colors">Universal across all items</span>}
+                      {group.products.length === 0 && <span className="text-xs italic text-[#64748B] px-1">Universal across all items</span>}
                    </div>
                 </div>
               </motion.div>
             ))}
           </div>
         </section>
+      ) : activeTab === 'transactions' ? (
+        <section className="space-y-6">
+           <h2 className="text-3xl md:text-4xl font-serif font-bold text-[#1A1F2E] tracking-tight mb-8">Global Transaction Feed</h2>
+           <TransactionsTable />
+        </section>
       ) : activeTab === 'audit-logs' ? (
-        <section className="space-y-10">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <section className="space-y-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
             <div className="space-y-2">
-              <h2 className="text-3xl md:text-4xl font-serif font-bold text-slate-900 dark:text-slate-100 tracking-tight transition-colors">System Records</h2>
-              <p className="text-slate-500 dark:text-slate-400 font-medium tracking-tight transition-colors">Monitoring administrative activities and protocol executions.</p>
-            </div>
-            <div className="bg-white/70 dark:bg-slate-900/50 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-3xl px-8 py-4 shadow-sm flex items-center gap-4 transition-colors">
-               <div className="w-12 h-12 bg-brand-secondary/10 dark:bg-brand-secondary/5 rounded-2xl flex items-center justify-center text-brand-secondary border border-brand-secondary/20 transition-colors">
-                 <Shield size={24} />
-               </div>
-               <div>
-                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-500 transition-colors">Audit Volume</p>
-                 <p className="text-xl font-black text-slate-900 dark:text-slate-100 transition-colors">{auditLogs.length} Events</p>
-               </div>
+              <h2 className="text-3xl md:text-4xl font-serif font-bold text-[#1A1F2E] tracking-tight">Security</h2>
+              <p className="text-[#64748B] font-medium transition-colors">Immutable system activity logs and audit trails.</p>
             </div>
           </div>
 
-          <div className="bg-white/70 dark:bg-slate-900/50 backdrop-blur-md rounded-[40px] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden p-8 transition-colors">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6 transition-colors">
+            {/* Filters */}
+            <div className="mb-8 flex flex-col sm:flex-row gap-4">
+              <div className="flex-1">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-[#64748B] mb-2">Filter by Action</label>
+                <select 
+                  value={auditActionFilter}
+                  onChange={(e) => setAuditActionFilter(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-[#1A1F2E] outline-none focus:border-[#1A1F2E] transition-colors"
+                >
+                  <option value="">All Actions</option>
+                  {auditDistinctActions.map(action => (
+                    <option key={action} value={action}>{action}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-[#64748B] mb-2">Filter by Personnel</label>
+                <select 
+                  value={auditAdminFilter}
+                  onChange={(e) => setAuditAdminFilter(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-[#1A1F2E] outline-none focus:border-[#1A1F2E] transition-colors"
+                >
+                  <option value="">All Personnel</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>{u.name || u.email}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="space-y-4 max-h-[700px] overflow-y-auto no-scrollbar pr-4">
               {auditLogs.map((log) => (
                 <motion.div 
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   key={log.id} 
-                  className="bg-slate-50/50 dark:bg-slate-950/50 border border-slate-200/50 dark:border-slate-800/30 rounded-[28px] p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-8 group hover:border-brand-secondary/30 transition-all hover:bg-white dark:hover:bg-slate-900 duration-500"
+                  className="bg-slate-50 border border-slate-200 rounded-xl p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-8 group hover:border-[#1A1F2E]/20 transition-all hover:bg-white duration-300"
                 >
                   <div className="flex items-center gap-6">
-                    <div className="w-14 h-14 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-center text-brand-secondary group-hover:scale-110 transition-transform shadow-sm">
+                    <div className="w-14 h-14 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-[#1A1F2E] group-hover:scale-110 transition-transform shadow-sm">
                       <Terminal size={24} />
                     </div>
                     <div>
                       <div className="flex items-center gap-3 mb-2">
-                        <span className="bg-brand-secondary/10 text-brand-secondary px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-brand-secondary/20">
+                        <span className="bg-[#1A1F2E]/5 text-[#1A1F2E] px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-slate-200">
                           {log.action}
                         </span>
-                        <h4 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">{log.entityName}</h4>
+                        <h4 className="text-lg font-bold text-[#1A1F2E] tracking-tight">{log.entityName}</h4>
                       </div>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 font-medium max-w-xl line-clamp-2 italic transition-colors">
+                      <p className="text-sm text-[#64748B] font-medium max-w-xl line-clamp-2 italic">
                         {log.details ? (typeof log.details === 'string' ? log.details : JSON.stringify(log.details)) : 'System mutation recorded.'}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-6 border-t md:border-t-0 md:border-l border-slate-100 dark:border-slate-800 pt-6 md:pt-0 md:pl-8 text-right w-full md:w-auto transition-colors">
+                  <div className="flex items-center gap-6 border-t md:border-t-0 md:border-l border-slate-100 pt-6 md:pt-0 md:pl-8 text-right w-full md:w-auto">
                     <div className="flex-1 md:flex-none">
-                       <p className="text-xs font-black uppercase tracking-[0.2em] text-brand-secondary mb-1">
+                       <p className="text-xs font-black uppercase tracking-[0.2em] text-[#1A1F2E] mb-1">
                           {log.adminName || 'System'}
                        </p>
-                       <p className="text-[10px] font-mono text-slate-400 dark:text-slate-500 font-medium transition-colors">
+                       <p className="text-[10px] font-mono text-[#64748B] font-medium">
                           {new Date(log.createdAt).toLocaleString()}
                        </p>
                     </div>
@@ -1178,9 +1188,9 @@ const AdminDashboard: React.FC = () => {
               ))}
               
               {auditLogs.length === 0 && (
-                <div className="py-40 text-center bg-slate-50/50 dark:bg-slate-950/20 rounded-[40px] border-2 border-dashed border-slate-200 dark:border-slate-800/50 transition-colors">
-                   <Package size={48} className="mx-auto mb-6 opacity-5 text-slate-400 transition-colors" />
-                   <p className="font-serif text-2xl italic text-slate-500 dark:text-slate-500 opacity-40 transition-colors">System archives are empty.</p>
+                <div className="py-40 text-center bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
+                   <Package size={48} className="mx-auto mb-6 text-slate-200" />
+                   <p className="font-serif text-2xl italic text-slate-400">System archives are empty.</p>
                 </div>
               )}
 
@@ -1188,7 +1198,7 @@ const AdminDashboard: React.FC = () => {
                 <button
                   onClick={loadMoreAuditLogs}
                   disabled={auditLoading}
-                  className="w-full py-6 bg-slate-50/50 dark:bg-slate-950/50 text-slate-500 dark:text-slate-400 hover:text-brand-secondary dark:hover:text-brand-secondary border border-slate-200 dark:border-slate-800 rounded-[28px] font-black uppercase tracking-[0.3em] text-[10px] transition-all hover:bg-white dark:hover:bg-slate-900 flex items-center justify-center gap-4"
+                  className="w-full py-6 bg-slate-50 text-[#64748B] hover:text-[#1A1F2E] border border-slate-200 rounded-xl font-black uppercase tracking-[0.3em] text-[10px] transition-all hover:bg-white flex items-center justify-center gap-4"
                 >
                   {auditLoading ? <RefreshCw className="animate-spin" size={16} /> : <History size={16} />}
                   {auditLoading ? 'Querying Master Records...' : 'Retrieve Legacy Logs'}
@@ -1198,9 +1208,9 @@ const AdminDashboard: React.FC = () => {
           </div>
         </section>
       ) : (
-        <div className="flex flex-col items-center justify-center p-20 bg-bg-sidebar/30 rounded-[40px] border border-dashed border-border-subtle overflow-hidden">
-          <Coffee size={48} className="text-brand-primary/20 mb-4 animate-bounce" />
-          <p className="font-serif text-xl text-brand-primary opacity-40">Ready to brew some data.</p>
+        <div className="flex flex-col items-center justify-center p-20 bg-slate-50 rounded-xl border border-dashed border-slate-200 overflow-hidden">
+          <Coffee size={48} className="text-[#1A1F2E]/20 mb-4 animate-bounce" />
+          <p className="font-serif text-xl text-[#1A1F2E] opacity-40">Ready to brew some data.</p>
         </div>
       )}
 
@@ -1330,38 +1340,38 @@ const ChoiceRow: React.FC<{ choice: any; onSuccess: () => void }> = ({ choice, o
 
   if (isEditing) {
     return (
-      <div className="flex items-center gap-2 p-3 bg-white dark:bg-slate-800 border border-brand-primary dark:border-brand-secondary rounded-2xl shadow-lg ring-4 ring-brand-primary/5 transition-all">
+      <div className="flex items-center gap-2 p-3 bg-white border border-[#1A1F2E] rounded-xl shadow-lg ring-4 ring-[#1A1F2E]/5 transition-all">
         <input 
           value={editData.name}
           onChange={e => setEditData({...editData, name: e.target.value})}
-          className="flex-1 bg-transparent text-sm font-bold font-sans outline-none text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600"
+          className="flex-1 bg-transparent text-sm font-bold outline-none text-[#1A1F2E] placeholder:text-slate-300"
           placeholder="Choice Name"
         />
-        <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="flex items-center gap-1 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200 transition-colors">
           <span className="text-[10px] font-black text-slate-400">₱</span>
           <input 
             type="number"
             value={editData.priceModifier}
             onChange={e => setEditData({...editData, priceModifier: Number(e.target.value)})}
-            className="w-14 bg-transparent text-[12px] font-bold text-slate-900 dark:text-brand-secondary outline-none text-center"
+            className="w-14 bg-transparent text-[12px] font-bold text-[#1A1F2E] outline-none text-center"
           />
         </div>
-        <button onClick={handleUpdate} disabled={loading} className="p-2.5 bg-slate-900 dark:bg-brand-primary text-white rounded-xl hover:bg-slate-800 dark:hover:bg-brand-secondary transition-all shadow-md">
+        <button onClick={handleUpdate} disabled={loading} className="p-2.5 bg-[#1A1F2E] text-white rounded-xl hover:bg-[#1A1F2E]/90 transition-all shadow-sm">
           {loading ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
         </button>
-        <button onClick={() => setIsEditing(false)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><X size={16} /></button>
+        <button onClick={() => setIsEditing(false)} className="p-2 text-slate-400 hover:text-slate-600 transition-colors"><X size={16} /></button>
       </div>
     );
   }
 
   return (
-    <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-950/50 p-4 rounded-[20px] border border-slate-200 dark:border-slate-800/50 group hover:border-slate-300 dark:hover:border-brand-secondary/30 transition-all hover:bg-white dark:hover:bg-slate-900 hover:shadow-sm">
+    <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-100 group hover:border-slate-200 transition-all hover:bg-white hover:shadow-sm">
       <div className="flex items-center gap-4">
-        <div className="w-2 h-2 rounded-full bg-brand-primary dark:bg-brand-secondary shadow-sm transition-colors" />
-        <span className="font-bold text-sm text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-3 transition-colors">
+        <div className="w-2 h-2 rounded-full bg-[#1A1F2E] transition-colors" />
+        <span className="font-bold text-sm text-[#1A1F2E] tracking-tight flex items-center gap-3 transition-colors">
           {choice.name}
           {choice.priceModifier !== 0 && (
-            <span className="text-[10px] text-slate-500 dark:text-brand-secondary font-black bg-slate-100 dark:bg-brand-secondary/5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-brand-secondary/10 transition-colors">
+            <span className="text-[10px] text-[#64748B] font-black bg-white px-2.5 py-1 rounded-lg border border-slate-200 transition-colors">
               {choice.priceModifier > 0 ? '+' : ''}₱{Number(choice.priceModifier).toFixed(2)}
             </span>
           )}
@@ -1370,13 +1380,13 @@ const ChoiceRow: React.FC<{ choice: any; onSuccess: () => void }> = ({ choice, o
       <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-x-1 group-hover:translate-x-0">
         <button 
           onClick={() => setIsEditing(true)}
-          className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 rounded-xl transition-all shadow-sm"
+          className="p-2 bg-white border border-slate-200 text-slate-400 hover:text-[#1A1F2E] rounded-lg transition-all shadow-sm"
         >
           <Edit3 size={14} />
         </button>
         <button 
           onClick={handleDelete}
-          className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 rounded-xl transition-all shadow-sm"
+          className="p-2 bg-white border border-slate-200 text-slate-400 hover:text-red-500 rounded-lg transition-all shadow-sm"
         >
           <Trash2 size={14} />
         </button>
@@ -1408,39 +1418,39 @@ const NewChoiceButton: React.FC<{ groupId: string; onSuccess: () => void }> = ({
     return (
       <button 
         onClick={() => setIsAdding(true)}
-        className="w-full py-4 border border-dashed border-slate-300 dark:border-slate-700 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500 hover:border-slate-900 dark:hover:border-brand-secondary hover:text-slate-900 dark:hover:text-brand-secondary hover:bg-white dark:hover:bg-slate-900/50 transition-all flex items-center justify-center gap-3 shadow-sm hover:shadow-md"
+        className="w-full py-4 border border-dashed border-slate-300 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] text-[#64748B] hover:border-[#1A1F2E] hover:text-[#1A1F2E] hover:bg-slate-50 transition-all flex items-center justify-center gap-3 shadow-sm hover:shadow-md"
       >
-        <Plus size={16} className="text-brand-primary dark:text-brand-secondary" />
+        <Plus size={16} className="text-[#1A1F2E]" />
         Include Choice
       </button>
     );
   }
 
   return (
-    <form onSubmit={handleAdd} className="p-6 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-[24px] space-y-4 shadow-inner transition-colors">
+    <form onSubmit={handleAdd} className="p-6 bg-slate-50 border border-slate-200 rounded-xl space-y-4 shadow-inner">
       <div className="space-y-1">
-        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Choice Name</label>
+        <label className="text-[10px] font-black uppercase tracking-widest text-[#64748B] ml-1">Choice Name</label>
         <input 
           autoFocus
           placeholder="e.g. Soy Milk"
           value={name}
           onChange={e => setName(e.target.value)}
-          className="w-full p-3.5 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl outline-none focus:ring-2 ring-slate-900/10 dark:ring-brand-primary/20 focus:border-slate-900 dark:focus:border-brand-primary text-slate-900 dark:text-slate-100 font-bold transition-all"
+          className="w-full p-3.5 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-[#1A1F2E] text-[#1A1F2E] font-bold transition-all"
         />
       </div>
       <div className="space-y-1">
-         <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Price Modifier (₱)</label>
+         <label className="text-[10px] font-black uppercase tracking-widest text-[#64748B] ml-1">Price Modifier (₱)</label>
          <input 
            type="number"
            placeholder="0.00"
            value={priceModifier}
            onChange={e => setPriceModifier(Number(e.target.value))}
-           className="w-full p-3.5 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl outline-none focus:ring-2 ring-slate-900/10 dark:ring-brand-primary/20 focus:border-slate-900 dark:focus:border-brand-primary text-slate-900 dark:text-brand-secondary font-black transition-all"
+           className="w-full p-3.5 text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-[#1A1F2E] text-[#1A1F2E] font-black transition-all"
          />
       </div>
       <div className="flex gap-3 pt-2">
-         <button type="submit" className="flex-1 py-3 bg-slate-900 dark:bg-brand-primary text-white rounded-xl text-xs font-bold uppercase tracking-widest shadow-md hover:bg-slate-800 dark:hover:bg-brand-secondary transition-all">Establish</button>
-         <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all">Abort</button>
+         <button type="submit" className="flex-1 py-3 bg-[#1A1F2E] text-white rounded-xl text-xs font-bold uppercase tracking-widest shadow-md hover:bg-[#1A1F2E]/90 transition-all">Establish</button>
+         <button type="button" onClick={() => setIsAdding(false)} className="flex-1 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase tracking-widest text-[#64748B] hover:bg-slate-50 transition-all">Abort</button>
       </div>
     </form>
   );
@@ -1529,57 +1539,57 @@ const CreateCustomizationModal: React.FC<{
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-brand-primary/10 dark:bg-slate-950/40 backdrop-blur-md"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md"
     >
       <motion.div 
         initial={{ scale: 0.95, y: 20 }}
         animate={{ scale: 1, y: 0 }}
-        className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-4xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[95vh]"
+        className="bg-white rounded-xl w-full max-w-4xl overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[95vh]"
       >
-        <div className="p-8 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center transition-colors">
+        <div className="p-8 border-b border-slate-100 flex justify-between items-center transition-colors">
           <div>
-            <h2 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100 tracking-tight">{group ? 'Refine Group' : 'New Variation Group'}</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Define options and link them to products.</p>
+            <h2 className="text-3xl font-serif font-bold text-[#1A1F2E] tracking-tight">{group ? 'Refine Group' : 'New Variation Group'}</h2>
+            <p className="text-sm text-[#64748B] font-medium">Define options and link them to products.</p>
           </div>
-          <button onClick={onClose} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-full transition-all text-slate-500 dark:text-slate-400">
+          <button onClick={onClose} className="p-3 hover:bg-slate-50 rounded-full transition-all text-[#64748B]">
             <X size={24} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-8 overflow-y-auto custom-scrollbar flex-1 transition-colors">
+        <form onSubmit={handleSubmit} className="p-8 space-y-8 overflow-y-auto custom-scrollbar flex-1">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-6">
                <div className="space-y-2">
-                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 ml-1">Group Title</label>
+                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] ml-1">Group Title</label>
                   <input 
                     required
                     value={formData.name}
                     onChange={e => setFormData({...formData, name: e.target.value})}
-                    className="w-full p-4 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-2xl focus:ring-2 ring-brand-primary/20 outline-none transition-all font-bold text-slate-900 dark:text-slate-100"
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#1A1F2E] outline-none transition-all font-bold text-[#1A1F2E]"
                     placeholder="e.g. Milk Options"
                   />
                </div>
-               <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-950/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+               <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
                   <button 
                     type="button"
                     onClick={() => setFormData({...formData, required: !formData.required})}
-                    className={`w-12 h-6 rounded-full relative transition-all ${formData.required ? 'bg-brand-primary' : 'bg-slate-200 dark:bg-slate-800'}`}
+                    className={`w-12 h-6 rounded-full relative transition-all ${formData.required ? 'bg-[#1A1F2E]' : 'bg-slate-200'}`}
                   >
                     <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${formData.required ? 'left-7' : 'left-1'}`}></div>
                   </button>
                   <div>
-                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100">Mandatory Choice</p>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">User must select at least one option.</p>
+                    <p className="text-sm font-bold text-[#1A1F2E]">Mandatory Choice</p>
+                    <p className="text-[10px] text-[#64748B] font-medium">User must select at least one option.</p>
                   </div>
                </div>
             </div>
 
             <div className="space-y-4">
-               <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 ml-1 flex items-center gap-2">
+               <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] ml-1 flex items-center gap-2">
                  <LinkIcon size={12} />
                  Choices
                </label>
-               <div className="bg-slate-50 dark:bg-slate-950/50 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar">
+               <div className="bg-slate-50 rounded-xl p-6 border border-slate-100 space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar">
                    <div className="space-y-3">
                      {formData.choices.map((choice, idx) => (
                        <div key={idx} className="flex gap-2 group/choice">
@@ -1587,7 +1597,7 @@ const CreateCustomizationModal: React.FC<{
                            placeholder="Choice"
                            value={choice.name}
                            onChange={e => updateChoice(idx, { name: e.target.value })}
-                           className="flex-1 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-100 focus:ring-2 ring-brand-primary/20 outline-none transition-all shadow-sm"
+                           className="flex-1 p-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#1A1F2E] focus:border-[#1A1F2E] outline-none transition-all shadow-sm"
                          />
                          <div className="relative w-24">
                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">₱</span>
@@ -1596,13 +1606,13 @@ const CreateCustomizationModal: React.FC<{
                              step="0.01"
                              value={choice.priceModifier}
                              onChange={e => updateChoice(idx, { priceModifier: Number(e.target.value) })}
-                             className="w-full pl-6 pr-3 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-brand-primary dark:text-brand-secondary focus:ring-2 ring-brand-primary/20 outline-none transition-all shadow-sm"
+                             className="w-full pl-6 pr-3 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#1A1F2E] focus:border-[#1A1F2E] outline-none transition-all shadow-sm"
                            />
                          </div>
                          <button 
                            type="button" 
                            onClick={() => removeChoice(idx)} 
-                           className="p-3 text-slate-400 hover:text-brand-danger hover:bg-red-50 dark:hover:bg-brand-danger/10 rounded-xl transition-all border border-transparent hover:border-brand-danger/20"
+                           className="p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
                          >
                            <Trash2 size={16} />
                          </button>
@@ -1783,48 +1793,48 @@ const CreateInventoryModal: React.FC<{
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl"
+      className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md"
     >
       <motion.div 
         initial={{ scale: 0.95, y: 30 }}
         animate={{ scale: 1, y: 0 }}
-        className="bg-slate-900 rounded-[40px] w-full max-w-3xl overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.5)] border border-slate-800 flex flex-col max-h-[90vh]"
+        className="bg-white rounded-xl w-full max-w-3xl overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]"
       >
-        <div className="p-10 border-b border-slate-800 flex justify-between items-center bg-slate-950/30">
+        <div className="p-10 border-b border-slate-100 flex justify-between items-center bg-slate-50">
           <div className="flex items-center gap-5">
-             <div className="w-14 h-14 bg-brand-primary/10 rounded-2xl flex items-center justify-center text-brand-primary border border-brand-primary/20">
+             <div className="w-14 h-14 bg-[#1A1F2E]/10 rounded-xl flex items-center justify-center text-[#1A1F2E] border border-slate-200">
                <Package size={28} />
              </div>
              <div>
-               <h2 className="text-3xl font-serif font-bold text-slate-100 tracking-tight">{inventoryItem ? 'Tune Resource' : 'New Compound'}</h2>
-               <p className="text-slate-400 font-medium font-mono text-[10px] uppercase tracking-widest mt-1">Supply Chain Configuration</p>
+               <h2 className="text-3xl font-serif font-bold text-[#1A1F2E] tracking-tight">{inventoryItem ? 'Tune Resource' : 'New Compound'}</h2>
+               <p className="text-[#64748B] font-medium text-[10px] uppercase tracking-widest mt-1">Supply Chain Configuration</p>
              </div>
           </div>
-          <button onClick={onClose} className="p-4 hover:bg-slate-800 rounded-full transition-all text-slate-500 hover:text-slate-200">
+          <button onClick={onClose} className="p-4 hover:bg-white rounded-full transition-all text-[#64748B] hover:text-[#1A1F2E]">
             <X size={28} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-10 space-y-10 overflow-y-auto custom-scrollbar bg-slate-900/50">
+        <form onSubmit={handleSubmit} className="p-10 space-y-10 overflow-y-auto custom-scrollbar">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
             <div className="space-y-6">
               <div className="space-y-3">
-                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 ml-1">Resource Name</label>
+                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] ml-1">Resource Name</label>
                 <input 
                   required
                   autoFocus
                   value={formData.name}
                   onChange={e => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-6 py-4 bg-slate-950 border border-slate-800 rounded-2xl focus:border-brand-secondary outline-none transition-all font-bold text-slate-100 placeholder:text-slate-700"
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#1A1F2E] outline-none transition-all font-bold text-[#1A1F2E] placeholder:text-slate-300"
                   placeholder="e.g. Milk Concentrate"
                 />
               </div>
               <div className="space-y-3">
-                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 ml-1">Metrics (Unit)</label>
+                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] ml-1">Metrics (Unit)</label>
                 <select 
                   value={formData.unit}
                   onChange={e => setFormData({...formData, unit: e.target.value})}
-                  className="w-full px-6 py-4 bg-slate-950 border border-slate-800 rounded-2xl focus:border-brand-secondary outline-none transition-all font-bold text-slate-100 appearance-none cursor-pointer"
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#1A1F2E] outline-none transition-all font-bold text-[#1A1F2E] appearance-none cursor-pointer"
                 >
                   <option value="kg">kg (kilograms)</option>
                   <option value="L">L (liters)</option>
@@ -1837,43 +1847,43 @@ const CreateInventoryModal: React.FC<{
             
             <div className="space-y-6">
               <div className="space-y-3">
-                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 ml-1">Total Payload (Stock)</label>
+                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] ml-1">Total Payload (Stock)</label>
                 <input 
                   required
                   type="number"
                   value={formData.stockLevel}
                   onChange={e => setFormData({...formData, stockLevel: Number(e.target.value)})}
-                  className="w-full px-6 py-4 bg-slate-950 border border-slate-800 rounded-2xl focus:border-brand-secondary outline-none transition-all font-serif font-black text-brand-secondary text-2xl"
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#1A1F2E] outline-none transition-all font-serif font-black text-[#1A1F2E] text-2xl"
                 />
               </div>
               <div className="space-y-3">
-                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 ml-1">Danger Threshold</label>
+                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] ml-1">Danger Threshold</label>
                 <input 
                   required
                   type="number"
                   value={formData.lowStockThreshold}
                   onChange={e => setFormData({...formData, lowStockThreshold: Number(e.target.value)})}
-                  className="w-full px-6 py-4 bg-slate-950 border border-slate-800 rounded-2xl focus:border-brand-secondary outline-none transition-all font-bold text-red-500"
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#1A1F2E] outline-none transition-all font-bold text-red-500"
                 />
               </div>
             </div>
           </div>
 
           {/* Linking Section */}
-          <div className="space-y-10 pt-6 border-t border-slate-800">
+          <div className="space-y-10 pt-6 border-t border-slate-100">
              {/* Product Links */}
              <div className="space-y-6">
                 <div className="flex justify-between items-center px-1">
                   <div>
-                    <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Asset Deduction Links</label>
-                    <p className="text-[9px] text-slate-600 mt-1 uppercase font-bold tracking-tight">Deduct from this item when these products are ordered.</p>
+                    <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B]">Asset Deduction Links</label>
+                    <p className="text-[9px] text-[#64748B]/60 mt-1 uppercase font-bold tracking-tight">Deduct from this item when these products are ordered.</p>
                   </div>
                   <button 
                     type="button" 
                     onClick={addProductLink}
-                    className="group flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-brand-secondary hover:text-brand-primary transition-colors"
+                    className="group flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#1A1F2E] hover:text-[#64748B] transition-colors"
                   >
-                    <div className="w-6 h-6 rounded-lg bg-brand-secondary/10 flex items-center justify-center group-hover:bg-brand-primary/20 transition-colors">
+                    <div className="w-6 h-6 rounded-lg bg-[#1A1F2E]/10 flex items-center justify-center group-hover:bg-slate-100 transition-colors">
                        <Plus size={14} />
                     </div>
                     Add Link
@@ -1882,7 +1892,7 @@ const CreateInventoryModal: React.FC<{
                 
                 <div className="space-y-3">
                   {formData.productLinks.map((link, idx) => (
-                    <div key={idx} className="flex flex-col sm:flex-row gap-4 items-center bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                    <div key={idx} className="flex flex-col sm:flex-row gap-4 items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
                       <div className="flex-1 w-full">
                         <SearchableSelect
                           options={products.map(p => ({ value: p.id, label: p.name }))}
@@ -1897,11 +1907,11 @@ const CreateInventoryModal: React.FC<{
                           step="0.01"
                           value={link.quantityNeeded}
                           onChange={e => updateProductLink(idx, 'quantityNeeded', parseFloat(e.target.value))}
-                          className="w-24 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-center font-bold text-slate-100"
+                          className="w-24 bg-white border border-slate-200 rounded-xl px-4 py-3 text-center font-bold text-[#1A1F2E]"
                           placeholder="Qty"
                         />
-                        <span className="text-[10px] font-black text-slate-500 uppercase w-10">{formData.unit}</span>
-                        <button type="button" onClick={() => removeProductLink(idx)} className="text-slate-500 hover:text-red-500">
+                        <span className="text-[10px] font-black text-[#64748B] uppercase w-10">{formData.unit}</span>
+                        <button type="button" onClick={() => removeProductLink(idx)} className="text-slate-400 hover:text-red-500">
                           <Trash2 size={18} />
                         </button>
                       </div>
@@ -1914,15 +1924,15 @@ const CreateInventoryModal: React.FC<{
              <div className="space-y-6">
                 <div className="flex justify-between items-center px-1">
                   <div>
-                    <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Variation Deduction Links</label>
-                    <p className="text-[9px] text-slate-600 mt-1 uppercase font-bold tracking-tight">Deduct from this item when these specific variations are selected.</p>
+                    <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B]">Variation Deduction Links</label>
+                    <p className="text-[9px] text-[#64748B]/60 mt-1 uppercase font-bold tracking-tight">Deduct from this item when these specific variations are selected.</p>
                   </div>
                   <button 
                     type="button" 
                     onClick={addCustomizationLink}
-                    className="group flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-brand-secondary hover:text-brand-primary transition-colors"
+                    className="group flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#1A1F2E] hover:text-[#64748B] transition-colors"
                   >
-                    <div className="w-6 h-6 rounded-lg bg-brand-secondary/10 flex items-center justify-center group-hover:bg-brand-primary/20 transition-colors">
+                    <div className="w-6 h-6 rounded-lg bg-[#1A1F2E]/10 flex items-center justify-center group-hover:bg-slate-100 transition-colors">
                        <Plus size={14} />
                     </div>
                     Add Link
@@ -1931,7 +1941,7 @@ const CreateInventoryModal: React.FC<{
                 
                 <div className="space-y-3">
                   {formData.customizationLinks.map((link, idx) => (
-                    <div key={idx} className="flex flex-col sm:flex-row gap-4 items-center bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                    <div key={idx} className="flex flex-col sm:flex-row gap-4 items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
                       <div className="flex-1 w-full">
                         <SearchableSelect
                           options={allChoices}
@@ -1946,11 +1956,11 @@ const CreateInventoryModal: React.FC<{
                           step="0.01"
                           value={link.quantityNeeded}
                           onChange={e => updateCustomizationLink(idx, 'quantityNeeded', parseFloat(e.target.value))}
-                          className="w-24 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-center font-bold text-slate-100"
+                          className="w-24 bg-white border border-slate-200 rounded-xl px-4 py-3 text-center font-bold text-[#1A1F2E]"
                           placeholder="Qty"
                         />
-                        <span className="text-[10px] font-black text-slate-500 uppercase w-10">{formData.unit}</span>
-                        <button type="button" onClick={() => removeCustomizationLink(idx)} className="text-slate-500 hover:text-red-500">
+                        <span className="text-[10px] font-black text-[#64748B] uppercase w-10">{formData.unit}</span>
+                        <button type="button" onClick={() => removeCustomizationLink(idx)} className="text-slate-400 hover:text-red-500">
                           <Trash2 size={18} />
                         </button>
                       </div>
@@ -1961,19 +1971,19 @@ const CreateInventoryModal: React.FC<{
           </div>
         </form>
 
-        <div className="p-10 bg-slate-950/50 border-t border-slate-800">
+        <div className="p-10 bg-slate-50 border-t border-slate-100">
            <div className="flex gap-6">
               <button 
                 type="button" 
                 onClick={onClose}
-                className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-100 transition-colors"
+                className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-[#64748B] hover:text-[#1A1F2E] transition-colors"
               >
                 Discard Changes
               </button>
               <button 
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="flex-1 bg-brand-primary text-white py-5 rounded-[20px] font-bold hover:bg-brand-secondary transition-all shadow-xl shadow-brand-primary/20 flex items-center justify-center gap-4 disabled:opacity-50"
+                className="flex-1 bg-[#1A1F2E] text-white py-5 rounded-xl font-bold hover:bg-[#1A1F2E]/90 transition-all shadow-sm flex items-center justify-center gap-4 disabled:opacity-50"
               >
                 {submitting ? <RefreshCw size={24} className="animate-spin" /> : <Save size={24} />}
                 <span className="font-black uppercase tracking-widest text-xs">{submitting ? 'Optimizing...' : 'Sync Pipeline'}</span>
@@ -2110,7 +2120,7 @@ const CreateProductModal: React.FC<{
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-6 overflow-y-auto custom-scrollbar transition-colors">
+        <form onSubmit={handleSubmit} className="p-8 space-y-6 overflow-y-auto custom-scrollbar">
           {/* Image Upload Area */}
           <div className="relative group">
             <input 
@@ -2121,7 +2131,7 @@ const CreateProductModal: React.FC<{
               accept="image/*"
             />
             {formData.imageUrl ? (
-              <div className="relative w-full h-48 rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-800 group">
+              <div className="relative w-full h-48 rounded-xl overflow-hidden border border-slate-200 group">
                 <img 
                   src={formData.imageUrl} 
                   alt="Preview" 
@@ -2142,14 +2152,14 @@ const CreateProductModal: React.FC<{
               <button 
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className={`w-full h-48 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl flex flex-col items-center justify-center gap-4 transition-all hover:bg-slate-50 dark:hover:bg-slate-950/50 hover:border-brand-primary group ${uploading ? 'animate-pulse' : ''}`}
+                className={`w-full h-48 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-4 transition-all hover:bg-slate-50 hover:border-[#1A1F2E] group ${uploading ? 'animate-pulse' : ''}`}
               >
-                <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center text-slate-400 group-hover:text-brand-primary transition-all">
+                <div className="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-[#1A1F2E] transition-all">
                   {uploading ? <RefreshCw size={32} className="animate-spin" /> : <Upload size={32} />}
                 </div>
                 <div className="text-center">
-                  <p className="font-bold text-brand-primary">Upload Product Image</p>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">PNG, JPG or WebP (Max 5MB)</p>
+                  <p className="font-bold text-[#1A1F2E]">Upload Product Image</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-[#64748B]">PNG, JPG or WebP (Max 5MB)</p>
                 </div>
               </button>
             )}
@@ -2158,24 +2168,24 @@ const CreateProductModal: React.FC<{
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 ml-1">Product Name</label>
+                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] ml-1">Product Name</label>
                 <input 
                   required
                   value={formData.name}
                   onChange={e => setFormData({...formData, name: e.target.value})}
-                  className="w-full p-4 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-2xl focus:ring-2 ring-brand-primary/20 outline-none transition-all font-bold text-slate-900 dark:text-slate-100"
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#1A1F2E] outline-none transition-all font-bold text-[#1A1F2E]"
                   placeholder="e.g. Lavender Honey Latte"
                 />
               </div>
               <div className="space-y-2">
-                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 ml-1">Price (₱)</label>
+                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] ml-1">Price (₱)</label>
                 <input 
                   required
                   type="number"
                   step="0.01"
                   value={formData.price}
                   onChange={e => setFormData({...formData, price: e.target.value})}
-                  className="w-full p-4 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-2xl focus:ring-2 ring-brand-primary/20 outline-none transition-all font-bold text-brand-primary dark:text-brand-secondary"
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#1A1F2E] outline-none transition-all font-bold text-[#1A1F2E]"
                   placeholder="0.00"
                 />
               </div>
@@ -2183,21 +2193,21 @@ const CreateProductModal: React.FC<{
             
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 ml-1">Category</label>
+                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] ml-1">Category</label>
                 <select 
                   value={formData.categoryId}
                   onChange={e => setFormData({...formData, categoryId: e.target.value})}
-                  className="w-full p-4 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-2xl focus:ring-2 ring-brand-primary/20 outline-none transition-all font-bold text-slate-900 dark:text-slate-100 appearance-none"
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#1A1F2E] outline-none transition-all font-bold text-[#1A1F2E] appearance-none"
                 >
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 ml-1">Or Image URL</label>
+                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] ml-1">Or Image URL</label>
                 <input 
                   value={formData.imageUrl}
                   onChange={e => setFormData({...formData, imageUrl: e.target.value})}
-                  className="w-full p-4 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-2xl focus:ring-2 ring-brand-primary/20 outline-none transition-all font-medium text-slate-500 dark:text-slate-400 italic"
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#1A1F2E] outline-none transition-all font-medium text-[#64748B] italic"
                   placeholder="https://images.unsplash.com/..."
                 />
               </div>
@@ -2205,11 +2215,11 @@ const CreateProductModal: React.FC<{
           </div>
 
           <div className="space-y-2">
-            <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 ml-1">Description</label>
+            <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] ml-1">Description</label>
             <textarea 
               value={formData.description}
               onChange={e => setFormData({...formData, description: e.target.value})}
-              className="w-full p-4 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-2xl focus:ring-2 ring-brand-primary/20 outline-none transition-all font-medium text-slate-700 dark:text-slate-300 resize-none"
+              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#1A1F2E] outline-none transition-all font-medium text-[#1A1F2E] resize-none"
               rows={3}
               placeholder="Tell a story about this drink..."
             />
@@ -2217,18 +2227,18 @@ const CreateProductModal: React.FC<{
 
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 ml-1">Ingredient Blueprint</label>
+              <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] ml-1">Ingredient Blueprint</label>
               <button 
                 type="button" 
                 onClick={addIngredient}
-                className="text-[10px] font-black uppercase tracking-widest text-brand-secondary hover:text-brand-primary flex items-center gap-1 transition-colors"
+                className="text-[10px] font-black uppercase tracking-widest text-[#1A1F2E] hover:text-[#64748B] flex items-center gap-1 transition-colors"
               >
                 <Plus size={12} /> Add Ingredient
               </button>
             </div>
             <div className="space-y-3">
               {formData.ingredients.map((ing, idx) => (
-                <div key={`new-ing-${ing.inventoryItemId}-${idx}`} className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-slate-50 dark:bg-slate-950/50 p-3 overflow-visible rounded-2xl border border-slate-200 dark:border-slate-800/40">
+                <div key={`new-ing-${ing.inventoryItemId}-${idx}`} className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-slate-50 p-3 overflow-visible rounded-xl border border-slate-100">
                   <SearchableSelect
                     options={inventory.map(item => ({ value: item.id, label: `${item.name} (${item.unit})` }))}
                     value={ing.inventoryItemId}
@@ -2246,29 +2256,29 @@ const CreateProductModal: React.FC<{
                            const val = isNaN(parseFloat(e.target.value)) ? 0 : parseFloat(e.target.value);
                            updateIngredient(idx, 'quantityNeeded', val);
                          }}
-                         className={`w-20 bg-white dark:bg-slate-900 border ${ing.quantityNeeded <= 0 ? 'border-brand-danger bg-red-50 dark:bg-red-950/20' : 'border-slate-200 dark:border-slate-800'} rounded-lg px-2 py-1.5 text-center font-bold text-sm outline-none focus:ring-2 ring-brand-primary/20 transition-all font-sans text-slate-900 dark:text-slate-100`}
+                         className={`w-20 bg-white border ${ing.quantityNeeded <= 0 ? 'border-red-500 bg-red-50' : 'border-slate-200'} rounded-lg px-2 py-1.5 text-center font-bold text-sm outline-none focus:border-[#1A1F2E] transition-all font-sans text-[#1A1F2E]`}
                          placeholder="Qty"
                        />
                        <span className="text-[10px] font-bold text-slate-400 uppercase">
                          {inventory.find(inv => inv.id === ing.inventoryItemId)?.unit || 'Qty'}
                        </span>
                     </div>
-                    <button type="button" onClick={() => removeIngredient(idx)} className="text-slate-400 hover:text-brand-danger p-1 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors ml-2">
+                    <button type="button" onClick={() => removeIngredient(idx)} className="text-slate-400 hover:text-red-500 p-1 hover:bg-white rounded-lg transition-colors ml-2">
                       <X size={18} />
                     </button>
                   </div>
                 </div>
               ))}
               {formData.ingredients.length === 0 && (
-                <div className="text-center py-8 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl opacity-40">
-                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">No ingredients assigned yet.</p>
+                <div className="text-center py-8 border-2 border-dashed border-slate-100 rounded-xl opacity-40">
+                  <p className="text-xs font-medium text-[#64748B]">No ingredients assigned yet.</p>
                 </div>
               )}
             </div>
           </div>
 
           <div className="space-y-4">
-            <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 ml-1">Customization Variations</label>
+            <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] ml-1">Customization Variations</label>
             <div className="flex flex-wrap gap-2">
                {customizationGroups.map(group => (
                  <button
@@ -2277,33 +2287,33 @@ const CreateProductModal: React.FC<{
                    onClick={() => toggleCustomizationGroup(group.id)}
                    className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
                      formData.customizationGroupIds.includes(group.id)
-                       ? 'bg-brand-primary text-white border-brand-primary shadow-lg shadow-brand-primary/10'
-                       : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-brand-primary'
+                       ? 'bg-[#1A1F2E] text-white border-[#1A1F2E] shadow-sm'
+                       : 'bg-white text-[#64748B] border-slate-200 hover:border-[#1A1F2E]'
                    }`}
                  >
                    {group.name}
                  </button>
                ))}
                {customizationGroups.length === 0 && (
-                 <p className="text-[10px] text-slate-400 italic">No variation groups defined yet.</p>
+                 <p className="text-[10px] text-[#64748B] italic">No variation groups defined yet.</p>
                )}
             </div>
           </div>
         </form>
 
-        <div className="p-8 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 transition-colors">
+        <div className="p-8 border-t border-slate-100 bg-slate-50 transition-colors">
           <div className="flex gap-4">
             <button 
               type="button"
               onClick={onClose}
-              className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 hover:text-brand-primary dark:hover:text-slate-100 transition-all font-sans"
+              className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] hover:text-[#1A1F2E] transition-all font-sans"
             >
               Cancel
             </button>
             <button 
               onClick={handleSubmit}
               disabled={submitting}
-              className="flex-1 bg-brand-primary text-white py-4 rounded-2xl font-bold hover:bg-brand-secondary transition-all shadow-xl shadow-brand-primary/10 flex items-center justify-center gap-3 disabled:opacity-50"
+              className="flex-1 bg-[#1A1F2E] text-white py-4 rounded-xl font-bold hover:bg-[#1A1F2E]/90 transition-all shadow-sm flex items-center justify-center gap-3 disabled:opacity-50"
             >
               {submitting ? <RefreshCw size={20} className="animate-spin" /> : <Plus size={20} />}
               <span className="text-xs font-black uppercase tracking-widest">{submitting ? 'Brewing...' : 'Create Product'}</span>
@@ -2348,15 +2358,15 @@ const CategoryCard: React.FC<{
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className="bg-white/70 dark:bg-slate-900/50 backdrop-blur-md rounded-[24px] border border-slate-200 dark:border-slate-800 p-8 shadow-sm relative overflow-hidden group hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-500"
+      className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm relative overflow-hidden group hover:border-[#1A1F2E]/20 transition-all duration-300"
     >
-      <div className="absolute top-0 right-0 w-24 h-24 bg-slate-50 dark:bg-slate-800/20 rounded-bl-full flex items-center justify-end pr-5 pt-5 text-slate-200 dark:text-slate-700 group-hover:text-brand-secondary/30 transition-colors">
+      <div className="absolute top-0 right-0 w-24 h-24 bg-slate-50 rounded-bl-full flex items-center justify-end pr-5 pt-5 text-slate-200 group-hover:text-[#1A1F2E]/10 transition-colors">
         <Package size={28} />
       </div>
 
       <div className="relative z-10 space-y-6">
         <div className="flex items-center gap-5">
-           <div className="w-16 h-16 rounded-2xl bg-white dark:bg-slate-950 flex items-center justify-center text-brand-secondary border border-slate-200 dark:border-slate-800 shadow-sm group-hover:scale-105 transition-transform duration-500">
+           <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center text-[#1A1F2E] border border-slate-200 shadow-sm transition-transform duration-500">
              <Package size={32} />
            </div>
            <div className="flex-1">
@@ -2365,29 +2375,29 @@ const CategoryCard: React.FC<{
                  autoFocus
                  value={name}
                  onChange={e => setName(e.target.value)}
-                 className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-slate-900 dark:text-slate-100 font-bold outline-none focus:ring-2 ring-brand-secondary/20 transition-colors"
+                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-[#1A1F2E] font-bold outline-none focus:border-[#1A1F2E] transition-colors"
                />
              ) : (
-               <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight group-hover:text-brand-secondary transition-colors line-clamp-1 transition-colors">{category.name}</h3>
+               <h3 className="text-2xl font-bold text-[#1A1F2E] tracking-tight group-hover:text-[#1A1F2E]/70 transition-colors line-clamp-1">{category.name}</h3>
              )}
-             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-500 mt-1 transition-colors">{category._count?.products || 0} Assets Registered</p>
+             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] mt-1">{category._count?.products || 0} Assets Registered</p>
            </div>
         </div>
 
-        <div className="flex justify-between items-center pt-6 border-t border-slate-100 dark:border-slate-800/50 transition-colors">
+        <div className="flex justify-between items-center pt-6 border-t border-slate-100">
           <div className="flex gap-2">
             {isEditing ? (
               <>
                 <button 
                   onClick={handleUpdate}
                   disabled={loading}
-                  className="p-3 bg-slate-900 dark:bg-brand-primary text-white rounded-xl hover:bg-slate-800 dark:hover:bg-brand-secondary transition-all shadow-md"
+                  className="p-3 bg-[#1A1F2E] text-white rounded-xl hover:bg-[#1A1F2E]/90 transition-all shadow-sm"
                 >
                   {loading ? <RefreshCw size={20} className="animate-spin" /> : <Check size={20} />}
                 </button>
                 <button 
                   onClick={() => { setIsEditing(false); setName(category.name); }}
-                  className="p-3 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                  className="p-3 bg-slate-100 text-[#64748B] rounded-xl hover:bg-slate-200 transition-all"
                 >
                   <X size={20} />
                 </button>
@@ -2396,7 +2406,7 @@ const CategoryCard: React.FC<{
               <>
                 <button 
                   onClick={() => setIsEditing(true)}
-                  className="w-10 h-10 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all rounded-xl border border-slate-200 dark:border-slate-800/50 shadow-sm"
+                  className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-[#1A1F2E] hover:bg-slate-50 transition-all rounded-xl border border-slate-200 shadow-sm"
                   title="Rename"
                 >
                   <Edit3 size={18} />
@@ -2404,10 +2414,10 @@ const CategoryCard: React.FC<{
                 <button 
                   onClick={() => onDelete(category.id)}
                   disabled={(category._count?.products || 0) > 0}
-                  className={`w-10 h-10 flex items-center justify-center transition-all rounded-xl border border-slate-200 dark:border-slate-800/50 shadow-sm ${
+                  className={`w-10 h-10 flex items-center justify-center transition-all rounded-xl border border-slate-200 shadow-sm ${
                     (category._count?.products || 0) > 0 
                       ? 'opacity-20 cursor-not-allowed text-slate-400' 
-                      : 'text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20'
+                      : 'text-slate-400 hover:text-red-500 hover:bg-red-50'
                   }`}
                   title={(category._count?.products || 0) > 0 ? "Cannot delete: Linked products exist" : "Delete Collection"}
                 >
@@ -2417,7 +2427,7 @@ const CategoryCard: React.FC<{
             )}
           </div>
           <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-600 transition-colors">ID: CID-{(category.id as string).slice(0, 4).toUpperCase()}</span>
+             <span className="text-[10px] font-black uppercase tracking-widest text-[#64748B]">ID: CID-{(category.id as string).slice(0, 4).toUpperCase()}</span>
           </div>
         </div>
       </div>
@@ -2502,31 +2512,31 @@ const ProductCard: React.FC<{
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className={`bg-white/70 dark:bg-slate-900/50 backdrop-blur-md rounded-[24px] border p-8 shadow-sm relative overflow-hidden group hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-500 flex flex-col justify-between ${!product.isVisible ? 'border-amber-200 dark:border-amber-900/30 grayscale-[0.8] opacity-80' : 'border-slate-200 dark:border-slate-800'}`}
+      className={`bg-white rounded-xl border p-6 shadow-sm relative overflow-hidden group hover:border-[#1A1F2E]/20 transition-all duration-300 flex flex-col justify-between ${!product.isVisible ? 'border-amber-200 grayscale-[0.8] opacity-80' : 'border-slate-200'}`}
     >
-      <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 dark:bg-slate-800/20 rounded-bl-full flex items-center justify-end pr-6 pt-6 text-slate-200 dark:text-slate-700 group-hover:text-brand-secondary/30 transition-colors">
+      <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-bl-full flex items-center justify-end pr-6 pt-6 text-slate-100 group-hover:text-[#1A1F2E]/10 transition-colors">
         <Coffee size={36} />
       </div>
 
       <div className="relative z-10">
         <div className="flex gap-6 mb-8">
-           <div className="w-24 h-24 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm flex-shrink-0 group-hover:scale-105 transition-transform duration-500">
+           <div className="w-24 h-24 rounded-2xl border border-slate-200 overflow-hidden shadow-sm flex-shrink-0">
               <img src={product.imageUrl || ''} alt={product.name} className="w-full h-full object-cover" />
            </div>
            <div className="space-y-2 flex-1">
               <div className="flex items-center gap-3">
-                <h3 className={`text-2xl font-bold tracking-tight transition-colors ${product.isVisible ? 'text-slate-900 dark:text-slate-100 group-hover:text-brand-secondary' : 'text-slate-400 dark:text-slate-500 line-through'}`}>{product.name}</h3>
+                <h3 className={`text-2xl font-bold tracking-tight ${product.isVisible ? 'text-[#1A1F2E] group-hover:text-[#1A1F2E]/70' : 'text-slate-400 line-through'}`}>{product.name}</h3>
                 {!product.isVisible && (
-                  <span className="text-[10px] bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-500 px-2.5 py-1 rounded-lg font-black uppercase tracking-widest border border-amber-200 dark:border-amber-900/50">Halted</span>
+                  <span className="text-[10px] bg-amber-50 text-amber-600 px-2.5 py-1 rounded-lg font-black uppercase tracking-widest border border-amber-200">Halted</span>
                 )}
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium line-clamp-2 leading-relaxed opacity-80 transition-colors">{product.description}</p>
-              <div className="flex flex-wrap gap-2 pt-1 transition-colors">
-                <span className="bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-500 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-slate-200 dark:border-slate-800 transition-colors">
+              <p className="text-xs text-[#64748B] font-medium line-clamp-2 leading-relaxed">{product.description}</p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <span className="bg-slate-50 text-[#64748B] px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-slate-200">
                   {categoryList.find(c => c.id === product.categoryId)?.name || 'Asset'}
                 </span>
                 {product.ingredients && product.ingredients.length > 0 && (
-                  <span className="bg-slate-50 dark:bg-slate-950 text-brand-secondary px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-slate-200 dark:border-slate-800 transition-colors">
+                  <span className="bg-slate-50 text-[#1A1F2E] px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-slate-200">
                     {product.ingredients.length} Compounds
                   </span>
                 )}
@@ -2536,15 +2546,15 @@ const ProductCard: React.FC<{
 
         <div className="flex justify-between items-end mb-8">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1 transition-colors">Standard Rate</p>
-            <p className="text-3xl font-serif font-black text-slate-900 dark:text-brand-secondary transition-colors">₱{Number(product.price).toFixed(2)}</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#64748B]/60 mb-1">Standard Rate</p>
+            <p className="text-3xl font-serif font-black text-[#1A1F2E]">₱{Number(product.price).toFixed(2)}</p>
           </div>
           {product.customizations && product.customizations.length > 0 && (
              <div className="text-right">
-               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1 transition-colors">Variations</p>
+               <p className="text-[10px] font-black uppercase tracking-widest text-[#64748B]/60 mb-1">Variations</p>
                <div className="flex flex-wrap justify-end gap-1 font-mono">
                  {product.customizations.map((c: any, idx: number) => (
-                   <span key={`${product.id}-cust-${c.groupId || idx}-${idx}`} className="w-2 h-2 rounded-full bg-brand-secondary/30 transition-colors"></span>
+                   <span key={`${product.id}-cust-${c.groupId || idx}-${idx}`} className="w-2 h-2 rounded-full bg-[#1A1F2E]/20"></span>
                  ))}
                </div>
              </div>
@@ -2552,14 +2562,14 @@ const ProductCard: React.FC<{
         </div>
       </div>
 
-      <div className="flex justify-between items-center pt-6 border-t border-slate-100 dark:border-slate-800/50 transition-colors">
+      <div className="flex justify-between items-center pt-6 border-t border-slate-100">
         <div className="flex gap-2">
            <button 
             onClick={handleToggleVisibility}
             className={`w-11 h-11 flex items-center justify-center transition-all rounded-xl border shadow-sm ${
               product.isVisible 
-                ? 'text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-800/50' 
-                : 'text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/30 hover:bg-amber-600 hover:text-white dark:hover:bg-amber-500'
+                ? 'text-slate-400 hover:text-[#1A1F2E] hover:bg-slate-50 border-slate-200' 
+                : 'text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-600 hover:text-white'
             }`}
             title={product.isVisible ? "Halt Sales" : "Resume Sales"}
           >
@@ -2567,7 +2577,7 @@ const ProductCard: React.FC<{
           </button>
           <button 
             onClick={() => setIsEditing(true)}
-            className="w-11 h-11 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all rounded-xl border border-slate-200 dark:border-slate-800/50 shadow-sm"
+            className="w-11 h-11 flex items-center justify-center text-slate-400 hover:text-[#1A1F2E] hover:bg-slate-50 transition-all rounded-xl border border-slate-200 shadow-sm"
             title="Configure"
           >
             <Edit3 size={20} />
@@ -2575,7 +2585,7 @@ const ProductCard: React.FC<{
         </div>
         <button 
           onClick={handleDelete}
-          className="w-11 h-11 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 transition-all rounded-xl border border-slate-200 dark:border-slate-800/50 shadow-sm"
+          className="w-11 h-11 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all rounded-xl border border-slate-200 shadow-sm"
           title="Decommission"
         >
           <Trash2 size={20} />
@@ -2732,7 +2742,7 @@ const EditProductModal: React.FC<{
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="absolute inset-0 bg-slate-950/80 backdrop-blur-2xl transition-all"
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-md"
         onClick={() => {
             const hasChanges = formData.name !== product.name || 
                               formData.price !== product.price.toString() ||
@@ -2751,132 +2761,189 @@ const EditProductModal: React.FC<{
         initial={{ scale: 0.95, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.95, y: 20 }}
-        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="relative w-[90vw] h-[90vh] bg-[#1a1f2e] shadow-2xl rounded-[40px] border border-slate-800 flex flex-col overflow-hidden"
+        className="relative w-full max-w-4xl max-h-[90vh] bg-white shadow-2xl rounded-xl border border-slate-100 flex flex-col overflow-hidden"
       >
         {/* Header */}
-        <div className="px-8 py-6 border-b border-slate-800 flex justify-between items-center bg-[#1a1f2e]/90 backdrop-blur-md sticky top-0 z-10">
-          <div className="flex items-center gap-4">
-             <h2 className="text-xl font-black uppercase tracking-widest text-white">EDIT PRODUCT ASSET: {product.name}</h2>
-             <span className="bg-teal-500/10 text-teal-400 border border-teal-500/20 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md">Active Edit</span>
+        <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50 sticky top-0 z-10 transition-colors">
+          <div>
+             <h2 className="text-3xl font-serif font-bold text-[#1A1F2E] tracking-tight">Configure Asset</h2>
+             <p className="text-sm text-[#64748B] font-medium">Updating identity of {product.name}</p>
           </div>
           <button 
             onClick={onClose}
-            className="p-3 bg-slate-800 hover:bg-slate-700 rounded-full transition-all text-slate-400 hover:text-white"
+            className="p-3 hover:bg-slate-100 rounded-full transition-all text-[#64748B]"
           >
-            <X size={20} />
+            <X size={24} />
           </button>
         </div>
 
         {/* Content - Two Column Grid */}
-        <div className="flex-1 overflow-y-auto no-scrollbar p-8">
-          <form className="grid grid-cols-2 gap-12 pb-20">
-            {/* Left: Visual Identity */}
-            <div className="space-y-8">
-              <div className="space-y-3">
-                 <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Asset Resource</label>
-                 <div className="relative aspect-video rounded-3xl overflow-hidden border border-slate-800 bg-slate-900 shadow-sm">
-                   {formData.imageUrl ? (
-                     <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
-                   ) : (
-                     <div className="w-full h-full flex items-center justify-center text-slate-700">Preview</div>
-                   )}
-                   <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
-                   <button 
-                     type="button" 
-                     onClick={() => fileInputRef.current?.click()}
-                     className="absolute bottom-4 right-4 bg-teal-500 text-slate-950 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-teal-400"
-                   >
-                     {uploading ? 'Processing...' : 'Change Asset'}
-                   </button>
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
+          <form className="space-y-12">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+              {/* Left: Visual Identity */}
+              <div className="space-y-8">
+                <div className="space-y-3">
+                   <label className="text-[10px] uppercase tracking-widest font-black text-[#64748B] ml-1">Asset Resource</label>
+                   <div className="relative aspect-video rounded-xl overflow-hidden border border-slate-200 bg-slate-50 group">
+                     {formData.imageUrl ? (
+                       <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                     ) : (
+                       <div className="w-full h-full flex items-center justify-center text-slate-300">No Image Resource</div>
+                     )}
+                     <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
+                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
+                        <button 
+                          type="button" 
+                          onClick={() => fileInputRef.current?.click()}
+                          className="bg-white/20 backdrop-blur-md text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/30"
+                        >
+                          {uploading ? 'Processing...' : 'Modify Visual'}
+                        </button>
+                     </div>
+                   </div>
+                   <input 
+                      value={formData.imageUrl}
+                      onChange={e => setFormData({...formData, imageUrl: e.target.value})}
+                      className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none transition-all font-medium text-xs text-[#64748B] italic"
+                      placeholder="or paste direct URL..."
+                    />
                  </div>
-                 <input 
-                    value={formData.imageUrl}
-                    onChange={e => setFormData({...formData, imageUrl: e.target.value})}
-                    className="w-full px-5 py-3 bg-slate-900/50 border border-slate-800 rounded-xl outline-none transition-all font-mono text-[10px] text-slate-400"
-                    placeholder="or paste URL here..."
-                  />
-               </div>
-               
-               <div className="space-y-2">
-                 <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Asset Nomenclature</label>
-                 <input 
-                   required
-                   value={formData.name}
-                   onChange={e => setFormData({...formData, name: e.target.value})}
-                   className="w-full px-5 py-4 bg-slate-900/50 border border-slate-800 focus:ring-1 focus:border-teal-500/50 rounded-2xl outline-none font-bold text-white text-lg"
-                 />
-               </div>
+                 
+                 <div className="space-y-2">
+                   <label className="text-[10px] uppercase tracking-widest font-black text-[#64748B] ml-1">Asset Nomenclature</label>
+                   <input 
+                     required
+                     value={formData.name}
+                     onChange={e => setFormData({...formData, name: e.target.value})}
+                     className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#1A1F2E] font-bold text-[#1A1F2E] text-lg transition-all"
+                   />
+                 </div>
 
-               <div className="space-y-2">
-                 <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Economic Rate (₱)</label>
-                 <input 
-                   required
-                   type="number"
-                   step="0.01"
-                   value={formData.price}
-                   onChange={e => setFormData({...formData, price: e.target.value})}
-                   className="w-full px-5 py-4 bg-slate-900/50 border border-slate-800 focus:ring-1 focus:border-teal-500/50 rounded-2xl outline-none text-white text-2xl font-black"
-                 />
-               </div>
+                 <div className="space-y-2">
+                   <label className="text-[10px] uppercase tracking-widest font-black text-[#64748B] ml-1">Economic Rate (₱)</label>
+                   <input 
+                     required
+                     type="number"
+                     step="0.01"
+                     value={formData.price}
+                     onChange={e => setFormData({...formData, price: e.target.value})}
+                     className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#1A1F2E] text-[#1A1F2E] text-2xl font-black transition-all"
+                   />
+                 </div>
+              </div>
+
+              {/* Right: Technical Configuration */}
+              <div className="space-y-8">
+                 <div className="space-y-2">
+                    <label className="text-[10px] uppercase tracking-widest font-black text-[#64748B] ml-1">Deployment Segment</label>
+                    <select 
+                      value={formData.categoryId}
+                      onChange={e => setFormData({...formData, categoryId: e.target.value})}
+                      className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#1A1F2E] font-bold text-[#1A1F2E] cursor-pointer appearance-none transition-all"
+                    >
+                      {categoryList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                 </div>
+
+                 <div className="space-y-2">
+                   <label className="text-[10px] uppercase tracking-widest font-black text-[#64748B] ml-1">Extended Information</label>
+                   <textarea 
+                     value={formData.description}
+                     onChange={e => setFormData({...formData, description: e.target.value})}
+                     className="w-full p-5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#1A1F2E] font-medium text-[#1A1F2E] text-sm resize-none transition-all"
+                     rows={3}
+                     placeholder="Technical specifications and details..."
+                   />
+                 </div>
+
+                 {/* Variations */}
+                 <div className="space-y-4">
+                    <label className="text-[10px] uppercase tracking-widest font-black text-[#64748B] ml-1">Activation Variations</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                       {customizationGroups.map(group => (
+                         <button
+                           key={group.id}
+                           type="button"
+                           onClick={() => toggleCustomizationGroup(group.id)}
+                           className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                             formData.customizationGroupIds.includes(group.id)
+                               ? 'bg-[#1A1F2E] border-[#1A1F2E] text-white shadow-sm'
+                               : 'bg-white text-[#64748B] border-slate-200 hover:border-[#1A1F2E]'
+                           }`}
+                         >
+                           {group.name}
+                         </button>
+                       ))}
+                    </div>
+                 </div>
+              </div>
             </div>
-
-            {/* Right: Technical Configuration */}
-            <div className="space-y-8">
-               <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Deployment Segment</label>
-                  <select 
-                    value={formData.categoryId}
-                    onChange={e => setFormData({...formData, categoryId: e.target.value})}
-                    className="w-full px-5 py-4 bg-slate-900/50 border border-slate-800 rounded-2xl outline-none font-bold text-white cursor-pointer"
-                  >
-                    {categoryList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-               </div>
-
-               {/* Variations */}
-               <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-widest font-bold text-slate-500 ml-1">Activation Variations</label>
-                  <div className="grid grid-cols-2 gap-3">
-                     {customizationGroups.map(group => (
-                       <button
-                         key={group.id}
-                         type="button"
-                         onClick={() => toggleCustomizationGroup(group.id)}
-                         className={`px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${
-                           formData.customizationGroupIds.includes(group.id)
-                             ? 'bg-teal-500 border-teal-500 text-slate-950'
-                             : 'bg-slate-900/30 text-slate-500 border-slate-800'
-                         }`}
-                       >
-                         {group.name}
-                       </button>
-                     ))}
+            
+            <div className="space-y-4 pt-8 border-t border-slate-100">
+              <div className="flex justify-between items-center mb-4">
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] ml-1">Material Composition</label>
+                <button 
+                  type="button" 
+                  onClick={addIngredient}
+                  className="text-[10px] font-black uppercase tracking-widest text-[#1A1F2E] hover:text-[#64748B] flex items-center gap-1 transition-colors"
+                >
+                  <Plus size={12} /> Add Ingredient
+                </button>
+              </div>
+              <div className="space-y-3">
+                {formData.ingredients.map((ing, idx) => (
+                  <div key={`edit-ing-${ing.inventoryItemId}-${idx}`} className="flex flex-col sm:flex-row gap-4 items-start sm:items-center bg-slate-50 p-4 rounded-xl border border-slate-100 overflow-visible">
+                    <SearchableSelect
+                      options={inventory.map(item => ({ value: item.id, label: `${item.name} (${item.unit})` }))}
+                      value={ing.inventoryItemId}
+                      onChange={(val) => updateIngredient(idx, 'inventoryItemId', val)}
+                      className="flex-1 w-full sm:w-auto font-bold text-sm"
+                    />
+                    <div className="flex items-center gap-3 self-end sm:self-auto w-full sm:w-auto justify-between sm:justify-start">
+                      <div className="flex items-center gap-2">
+                         <input 
+                           type="number"
+                           step="0.01"
+                           value={ing.quantityNeeded || ''}
+                           onChange={e => updateIngredient(idx, 'quantityNeeded', parseFloat(e.target.value) || 0)}
+                           className="w-24 bg-white border border-slate-200 rounded-lg px-3 py-2 text-center font-bold text-[#1A1F2E] outline-none focus:border-[#1A1F2E] transition-all"
+                           placeholder="Qty"
+                         />
+                         <span className="text-[10px] font-bold text-slate-400 uppercase">
+                           {inventory.find(inv => inv.id === ing.inventoryItemId)?.unit || 'Qty'}
+                         </span>
+                      </div>
+                      <button type="button" onClick={() => removeIngredient(idx)} className="text-slate-400 hover:text-red-500 p-2 hover:bg-white rounded-xl transition-all">
+                        <X size={20} />
+                      </button>
+                    </div>
                   </div>
-               </div>
+                ))}
+              </div>
             </div>
           </form>
         </div>
 
         {/* Sticky Footer */}
-        <div className="p-8 border-t border-slate-800 bg-[#1a1f2e] sticky bottom-0 z-10 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
-           <div className="flex justify-between items-center">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Press ESC to discard, Ctrl+S to save</p>
-              <div className="flex gap-4">
+        <div className="p-8 border-t border-slate-100 bg-slate-50 sticky bottom-0 z-10 shadow-sm transition-colors">
+           <div className="flex justify-between items-center gap-6">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#64748B] opacity-60 hidden md:block">ESC to discard • Ctrl+S to save</p>
+              <div className="flex gap-4 w-full md:w-auto">
                 <button 
                   type="button" 
                   onClick={onClose}
-                  className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 hover:text-white"
+                  className="flex-1 md:flex-none px-8 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] hover:text-[#1A1F2E] transition-all font-sans"
                 >
                   Discard
                 </button>
                 <button 
                   onClick={handleSubmit}
                   disabled={submitting || uploading}
-                  className="bg-white text-slate-950 px-10 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-200 flex items-center justify-center gap-4 disabled:opacity-50 min-w-[200px]"
+                  className="flex-1 md:flex-none bg-[#1A1F2E] text-white px-12 py-4 rounded-xl font-bold hover:bg-slate-800 transition-all shadow-sm flex items-center justify-center gap-3 disabled:opacity-50 min-w-[200px]"
                 >
-                  {submitting ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
-                  {submitting ? 'Saving...' : 'Save Changes'}
+                  {submitting ? <RefreshCw size={20} className="animate-spin" /> : <Save size={20} />}
+                  <span className="text-xs font-black uppercase tracking-widest">{submitting ? 'Updating...' : 'Commit Changes'}</span>
                 </button>
               </div>
            </div>
@@ -2887,15 +2954,15 @@ const EditProductModal: React.FC<{
 };
 
 const StatCard = ({ icon, label, value }: { icon: React.ReactNode, label: string, value: string | number }) => (
-  <div className="bg-white/70 dark:bg-slate-900/50 backdrop-blur-md p-10 rounded-[40px] shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col items-center text-center transition-all hover:border-slate-300 dark:hover:border-slate-700 group relative overflow-hidden">
-    <div className="absolute top-0 right-0 w-24 h-24 bg-brand-secondary/5 rounded-bl-full opacity-50 group-hover:scale-110 transition-transform duration-700 transition-colors" />
-    <div className="p-6 bg-slate-50 dark:bg-slate-950 rounded-3xl mb-6 shadow-sm group-hover:scale-110 transition-transform border border-slate-100 dark:border-slate-800 transition-colors">
-      <div className="text-brand-secondary drop-shadow-[0_0_10px_rgba(200,169,126,0.1)] transition-colors">
+  <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center text-center transition-all hover:border-slate-300 group relative overflow-hidden">
+    <div className="absolute top-0 right-0 w-24 h-24 bg-[#1A1F2E]/5 rounded-bl-full opacity-50 group-hover:scale-110 transition-transform duration-700" />
+    <div className="p-6 bg-slate-50 rounded-xl mb-6 shadow-sm group-hover:scale-110 transition-transform border border-slate-100">
+      <div className="text-[#1A1F2E]">
         {icon}
       </div>
     </div>
-    <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em] mb-4 transition-colors group-hover:text-brand-secondary">{label}</p>
-    <p className="text-5xl font-serif font-black text-slate-900 dark:text-slate-100 transition-colors tracking-tighter">{value}</p>
+    <p className="text-[10px] font-black text-[#64748B] uppercase tracking-[0.3em] mb-4 transition-colors group-hover:text-[#1A1F2E]">{label}</p>
+    <p className="text-5xl font-serif font-black text-[#1A1F2E] transition-colors tracking-tighter">{value}</p>
   </div>
 );
 
@@ -2946,48 +3013,48 @@ const CreateCategoryModal: React.FC<{
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-md"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md"
     >
       <motion.div 
         initial={{ scale: 0.95, y: 20 }}
         animate={{ scale: 1, y: 0 }}
-        className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-md overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col transition-colors"
+        className="bg-white rounded-xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100 flex flex-col transition-colors"
       >
-        <div className="p-8 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center transition-colors">
+        <div className="p-8 border-b border-slate-100 flex justify-between items-center">
           <div>
-            <h2 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100 tracking-tight transition-colors">{category ? 'Refine Category' : 'New Collection'}</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium transition-colors">Define a new segment for your menu.</p>
+            <h2 className="text-3xl font-serif font-bold text-[#1A1F2E] tracking-tight">{category ? 'Refine Category' : 'New Collection'}</h2>
+            <p className="text-sm text-[#64748B] font-medium">Define a new segment for your menu.</p>
           </div>
-          <button onClick={onClose} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-all text-slate-400">
+          <button onClick={onClose} className="p-3 hover:bg-slate-50 rounded-full transition-all text-[#64748B]">
             <X size={24} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-6 transition-colors">
-          <div className="space-y-2 transition-colors">
-            <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 ml-1">Category Name</label>
+        <form onSubmit={handleSubmit} className="p-8 space-y-6">
+          <div className="space-y-2">
+            <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] ml-1">Category Name</label>
             <input 
               required
               autoFocus
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full p-4 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-2xl focus:ring-2 ring-slate-900/10 dark:ring-brand-secondary/20 outline-none transition-all font-bold text-slate-900 dark:text-slate-100"
+              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#1A1F2E] outline-none transition-all font-bold text-[#1A1F2E]"
               placeholder="e.g. Signature Lattes"
             />
           </div>
 
-          <div className="pt-4 flex gap-4 transition-colors">
+          <div className="pt-4 flex gap-4">
             <button 
               type="button"
               onClick={onClose}
-              className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-all font-sans"
+              className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-[#64748B] hover:text-[#1A1F2E] transition-all font-sans"
             >
               Cancel
             </button>
             <button 
               type="submit"
               disabled={submitting}
-              className="flex-1 bg-slate-900 dark:bg-brand-primary text-white py-4 rounded-2xl font-bold hover:bg-slate-800 dark:hover:bg-brand-secondary transition-all shadow-xl shadow-slate-900/5 dark:shadow-brand-primary/10 flex items-center justify-center gap-3 disabled:opacity-50"
+              className="flex-1 bg-[#1A1F2E] text-white py-4 rounded-xl font-bold hover:bg-[#1A1F2E]/90 transition-all shadow-sm flex items-center justify-center gap-3 disabled:opacity-50"
             >
               {submitting ? <RefreshCw size={20} className="animate-spin" /> : <Package size={20} />}
               <span className="text-xs font-black uppercase tracking-widest">{submitting ? 'Setting up...' : (category ? 'Update Category' : 'Establish Category')}</span>

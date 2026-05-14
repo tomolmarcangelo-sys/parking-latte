@@ -40,17 +40,17 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({ options, val
         onClick={() => { setIsOpen(!isOpen); setSearch(''); }}
       >
         <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
-        <ChevronDown size={14} className="text-text-muted flex-shrink-0 ml-1" />
+        <ChevronDown size={14} className="text-[#64748B] flex-shrink-0 ml-1" />
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 top-[calc(100%+4px)] left-0 w-[240px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-72 transform origin-top-left transition-colors">
-          <div className="p-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3 transition-colors">
-            <Search size={14} className="text-slate-400 flex-shrink-0" />
+        <div className="absolute z-50 top-[calc(100%+4px)] left-0 w-[240px] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden flex flex-col max-h-72 transform origin-top-left transition-colors">
+          <div className="p-3 border-b border-slate-100 flex items-center gap-3 transition-colors">
+            <Search size={14} className="text-[#64748B] flex-shrink-0" />
             <input
               autoFocus
               type="text"
-              className="w-full text-xs outline-none bg-transparent text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+              className="w-full text-xs outline-none bg-transparent text-[#1A1F2E] placeholder:text-slate-300 font-medium"
               placeholder="Search items..."
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -61,7 +61,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({ options, val
               filteredOptions.map(option => (
                 <div
                   key={option.value}
-                  className={`px-3 py-2.5 text-xs flex items-center cursor-pointer rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-all ${option.value === value ? 'bg-slate-900 dark:bg-brand-secondary text-white dark:text-slate-950 font-bold' : 'text-slate-600 dark:text-slate-400'}`}
+                  className={`px-3 py-2.5 text-xs flex items-center cursor-pointer rounded-xl hover:bg-slate-50 transition-all ${option.value === value ? 'bg-[#1A1F2E] text-white font-bold' : 'text-[#64748B]'}`}
                   onClick={() => {
                     onChange(option.value);
                     setIsOpen(false);
@@ -71,7 +71,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({ options, val
                 </div>
               ))
             ) : (
-              <div className="p-4 text-xs text-slate-400 italic text-center">No segments found</div>
+              <div className="p-4 text-xs text-slate-300 italic text-center font-medium">No segments found</div>
             )}
           </div>
         </div>

@@ -8,25 +8,63 @@ inventoryRouter.get('/', async (req, res) => {
   const prisma = await getPrismaClient();
   if (!prisma) return res.status(503).json({ error: 'Database not configured' });
   try {
-    const inventory = await prisma.inventoryItem.findMany({
-      include: {
-        products: {
-          include: {
-            product: true
+    const [inventory, carts] = await Promise.all([
+      prisma.inventoryItem.findMany({
+        include: {
+          products: { include: { product: true } },
+          customizations: { include: { choice: { include: { group: true } } } }
+        }
+      }),
+      prisma.cartItem.findMany({
+        include: {
+          product: {
+            include: {
+              ingredients: true
+            }
           }
-        },
-        customizations: {
-          include: {
-            choice: {
-              include: {
-                group: true
+        }
+      })
+    ]);
+
+    // Calculate projected deduction from carts
+    const projectedDeductions = new Map<string, number>();
+
+    for (const cart of carts) {
+      // 1. Base Product Ingredients
+      for (const ingredient of cart.product.ingredients) {
+        const needed = ingredient.quantityNeeded * cart.quantity;
+        projectedDeductions.set(ingredient.inventoryItemId, (projectedDeductions.get(ingredient.inventoryItemId) || 0) + needed);
+      }
+
+      // 2. Customization Ingredients
+      if (cart.customization && typeof cart.customization === 'object') {
+        const customization = cart.customization as Record<string, any>;
+        for (const [groupName, choiceValue] of Object.entries(customization)) {
+          const names = Array.isArray(choiceValue) ? choiceValue : [choiceValue];
+          for (const name of names) {
+            if (!name) continue;
+            // Fetch ingredients for this choice
+            const choice = await prisma.customizationChoice.findFirst({
+              where: { name: String(name), group: { name: groupName } },
+              include: { ingredients: true }
+            });
+            if (choice) {
+              for (const ingredient of choice.ingredients) {
+                const needed = ingredient.quantityNeeded * cart.quantity;
+                projectedDeductions.set(ingredient.inventoryItemId, (projectedDeductions.get(ingredient.inventoryItemId) || 0) + needed);
               }
             }
           }
         }
       }
-    });
-    res.json(inventory);
+    }
+
+    const inventoryWithProjected = inventory.map(item => ({
+      ...item,
+      projectedStock: Math.max(0, item.stockLevel - (projectedDeductions.get(item.id) || 0))
+    }));
+
+    res.json(inventoryWithProjected);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch inventory' });
   }

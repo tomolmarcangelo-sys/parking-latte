@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { CartProvider } from './context/CartContext';
+import { OrderProvider } from './context/OrderContext';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { Toaster } from 'react-hot-toast';
 import { Coffee, Loader2 } from 'lucide-react';
@@ -45,7 +46,8 @@ export default function App() {
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <ThemeProvider>
         <AuthProvider>
-          <CartProvider>
+          <OrderProvider>
+            <CartProvider>
             <Toaster position="bottom-right" reverseOrder={false} />
             <BrowserRouter>
               <ScrollToTop />
@@ -73,8 +75,9 @@ export default function App() {
               </Route>
             </Routes>
           </BrowserRouter>
-        </CartProvider>
-      </AuthProvider>
+            </CartProvider>
+          </OrderProvider>
+        </AuthProvider>
       </ThemeProvider>
     </GoogleOAuthProvider>
   );

@@ -8,6 +8,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useCart } from '../context/CartContext';
+import { useOrders } from '../context/OrderContext';
 import { motion, AnimatePresence } from 'motion/react';
 import toast from 'react-hot-toast';
 
@@ -29,6 +30,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const { user, logout, isAdmin } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { cart } = useCart();
+  const { staffQueueCount } = useOrders();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -94,7 +96,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const navContent = (
-    <div className={`flex flex-col h-full bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800/50 shadow-sm transition-all duration-300 relative ${isCollapsed ? 'items-center' : ''}`}>
+    <div className={`flex flex-col h-full bg-slate-50 dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800/50 shadow-sm transition-all duration-300 relative ${isCollapsed ? 'items-center' : ''}`}>
       {/* Collapse Toggle (Desktop Admin Only) */}
       {isAdmin && onToggleCollapse && (
         <button 
@@ -111,16 +113,16 @@ const Sidebar: React.FC<SidebarProps> = ({
           <div className="w-10 h-10 bg-brand-primary dark:bg-slate-800 rounded-2xl flex items-center justify-center shadow-lg shadow-brand-primary/20 dark:shadow-black/20 flex-shrink-0">
             <Coffee size={24} className="text-white dark:text-brand-secondary" />
           </div>
-          {!isCollapsed && <h1 className="font-serif text-xl font-bold tracking-tight text-brand-primary dark:text-slate-100 uppercase truncate">Parking</h1>}
+          {!isCollapsed && <h1 className="font-serif text-lg md:text-xl font-semibold tracking-wider text-brand-primary dark:text-slate-100 uppercase truncate">Parking Latte</h1>}
         </Link>
         {!isCollapsed && (
           <div className="flex items-center gap-2">
             <button 
               onClick={toggleTheme}
-              className="p-2.5 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:text-brand-primary dark:hover:text-slate-100 rounded-xl transition-all"
+              className="p-2.5 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 hover:text-brand-primary dark:hover:text-slate-100 rounded-xl transition-all duration-300"
               title="Toggle theme"
             >
-              {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+              {theme === 'light' ? <Moon size={20} className="transition-all duration-300" /> : <Sun size={20} className="transition-all duration-300" />}
             </button>
             <button onClick={onClose} className="md:hidden p-2.5 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:text-brand-primary dark:hover:text-slate-100 rounded-xl">
               <X size={20} />
@@ -164,7 +166,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             <div>
               {!isCollapsed && <h3 className="px-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mb-4 ml-1">Management</h3>}
               <div className="space-y-1">
-                <NavItem to="/staff" icon={<LayoutDashboard size={20} />} label="Staff Queue" />
+                <NavItem to="/staff" icon={<LayoutDashboard size={20} />} label="Staff Queue" badge={staffQueueCount} />
                 {isAdmin && (
                   <NavItem to="/admin" icon={<Shield size={20} />} label="Admin Controls" />
                 )}

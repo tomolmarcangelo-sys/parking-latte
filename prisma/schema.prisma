@@ -19,6 +19,7 @@ enum Role {
 enum OrderStatus {
   PENDING
   PREPARING
+  READY
   COMPLETED
   CANCELLED
 }
@@ -34,6 +35,7 @@ model User {
   verificationTokenExpires DateTime?
   role                    Role      @default(CUSTOMER)
   orders                  Order[]
+  cartItems               CartItem[]
   auditLogs               AuditLog[] @relation("AdminLogs")
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
@@ -57,6 +59,7 @@ model Product {
   ingredients     ProductIngredient[]
   customizations  ProductCustomization[]
   orderItems      OrderItem[]
+  cartItems       CartItem[]
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
 }
@@ -117,15 +120,32 @@ model CustomizationIngredient {
   quantityNeeded  Float
 }
 
+model CartItem {
+  id            String  @id @default(uuid())
+  userId        String
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product @relation(fields: [productId], references: [id])
+  quantity      Int
+  customization Json? // e.g., { "options": [{ "name": "...", "priceModifier": 0 }] }
+}
+
 model Order {
-  id          String      @id @default(uuid())
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId      String
-  status      OrderStatus @default(PENDING)
-  totalAmount Decimal     @db.Decimal(10, 2)
-  items       OrderItem[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id                String      @id @default(uuid())
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            String
+  status            OrderStatus @default(PENDING)
+  totalAmount       Decimal     @db.Decimal(10, 2)
+  items             OrderItem[]
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  readyAt           DateTime?
+  completedAt       DateTime?
+
+  staffNotes        String?
+  estimatedPrepTime Int?        @default(10)
+  lastUpdatedBy     String?
 }
 
 model OrderItem {
