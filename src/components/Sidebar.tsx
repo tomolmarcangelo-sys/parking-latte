@@ -113,7 +113,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           <div className="w-10 h-10 bg-brand-primary dark:bg-slate-800 rounded-2xl flex items-center justify-center shadow-lg shadow-brand-primary/20 dark:shadow-black/20 flex-shrink-0">
             <Coffee size={24} className="text-white dark:text-brand-secondary" />
           </div>
-          {!isCollapsed && <h1 className="font-serif text-lg md:text-xl font-semibold tracking-wider text-brand-primary dark:text-slate-100 uppercase truncate">Parking Latte</h1>}
+          {!isCollapsed && <h1 className="font-serif text-xl font-bold tracking-tight text-brand-primary dark:text-slate-100 uppercase truncate">Parking</h1>}
         </Link>
         {!isCollapsed && (
           <div className="flex items-center gap-2">

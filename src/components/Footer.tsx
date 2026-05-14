@@ -57,18 +57,18 @@ const Footer: React.FC = () => {
           <h3 className="font-bold text-brand-primary uppercase tracking-widest text-xs">Cozy Up</h3>
           <ul className="space-y-4">
             <li className="flex items-start gap-3">
-              <MapPin size={18} className="text-slate-400 mt-0.5" />
+              <MapPin size={18} className="text-brand-secondary mt-0.5" />
               <span className="text-text-muted text-sm leading-relaxed">
-                HRA Plaza, Salog, Hinunangan, Southern Leyte 6608
+                123 Barista Lane, Espresso District, QC 1100
               </span>
             </li>
             <li className="flex items-center gap-3">
-              <Phone size={18} className="text-slate-400" />
-              <span className="text-text-muted text-sm">+63 9120491154</span>
+              <Phone size={18} className="text-brand-secondary" />
+              <span className="text-text-muted text-sm">+63 900 123 4567</span>
             </li>
             <li className="flex items-center gap-3">
-              <Mail size={18} className="text-slate-400" />
-              <span className="text-text-muted text-sm">tomolmarc@outlook.com</span>
+              <Mail size={18} className="text-brand-secondary" />
+              <span className="text-text-muted text-sm">hello@parkinglatte.com</span>
             </li>
           </ul>
         </div>
