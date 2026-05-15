@@ -625,13 +625,13 @@ const AdminDashboard: React.FC = () => {
                       {/* Linked Products Feedback */}
                       {((item as any).products?.length > 0 || (item as any).customizations?.length > 0) && (
                         <div className="flex flex-wrap gap-1.5 mt-1">
-                          {(item as any).products?.map((p: any) => (
-                            <span key={p.productId} className="text-[10px] bg-slate-100 text-[#64748B] px-2 py-0.5 rounded font-medium border border-slate-200">
+                          {(item as any).products?.map((p: any, pIdx: number) => (
+                            <span key={`p-${p.productId}-${pIdx}`} className="text-[10px] bg-slate-100 text-[#64748B] px-2 py-0.5 rounded font-medium border border-slate-200">
                               {p.product.name}
                             </span>
                           ))}
-                          {(item as any).customizations?.map((c: any) => (
-                            <span key={c.choiceId} className="text-[10px] bg-brand-primary/5 text-brand-primary px-2 py-0.5 rounded font-medium border border-brand-primary/10">
+                          {(item as any).customizations?.map((c: any, cIdx: number) => (
+                            <span key={`c-${c.choiceId}-${cIdx}`} className="text-[10px] bg-brand-primary/5 text-brand-primary px-2 py-0.5 rounded font-medium border border-brand-primary/10">
                               {c.choice.group.name}: {c.choice.name}
                             </span>
                           ))}
@@ -784,13 +784,13 @@ const AdminDashboard: React.FC = () => {
                           
                           {/* Linked Products Feedback - Requirement 4 */}
                           <div className="flex flex-wrap gap-1 mt-2">
-                             {(item as any).products?.map((p: any) => (
-                               <span key={p.productId} className="text-[9px] bg-slate-100 text-[#64748B] px-1.5 py-0.5 rounded border border-slate-200">
+                          {(item as any).products?.map((p: any, pIdx: number) => (
+                               <span key={`tp-${p.productId}-${pIdx}`} className="text-[9px] bg-slate-100 text-[#64748B] px-1.5 py-0.5 rounded border border-slate-200">
                                  {p.product.name}
                                </span>
                              ))}
-                             {(item as any).customizations?.map((c: any) => (
-                               <span key={c.choiceId} className="text-[9px] bg-brand-primary/5 text-brand-primary px-1.5 py-0.5 rounded border border-brand-primary/10">
+                             {(item as any).customizations?.map((c: any, cIdx: number) => (
+                               <span key={`tc-${c.choiceId}-${cIdx}`} className="text-[9px] bg-brand-primary/5 text-brand-primary px-1.5 py-0.5 rounded border border-brand-primary/10">
                                  {c.choice.group.name}: {c.choice.name}
                                </span>
                              ))}

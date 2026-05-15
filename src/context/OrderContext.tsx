@@ -10,6 +10,7 @@ interface OrderContextType {
   staffQueueCount: number;
   loading: boolean;
   refreshing: boolean;
+  socketConnected: boolean;
   fetchOrders: () => Promise<void>;
   updateStatus: (orderId: string, status: OrderStatus, staffNotes?: string) => Promise<void>;
   deleteOrder: (orderId: string) => Promise<void>;
@@ -21,6 +22,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
   const { token, user } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
   
@@ -44,7 +46,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setLoading(false);
       setRefreshing(false);
     }
-  }, [token, user]);
+  }, [token, user?.role]); // Use user.role instead of user object for stability
 
   useEffect(() => {
     if (!token || !user) {
@@ -54,12 +56,32 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       setOrders([]);
       setLoading(false);
+      setSocketConnected(false);
       return;
     }
 
     const newSocket = io('/', {
       auth: { token },
-      transports: ['websocket', 'polling']
+      transports: ['polling', 'websocket'], // Prefer polling first to establish stable connection
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000
+    });
+
+    newSocket.on('connect', () => {
+      console.log('[Socket] Connected to server');
+      setSocketConnected(true);
+    });
+
+    newSocket.on('disconnect', () => {
+      console.log('[Socket] Disconnected from server');
+      setSocketConnected(false);
+    });
+
+    newSocket.on('connect_error', (err) => {
+      console.error('[Socket] Connection error:', err.message);
+      setSocketConnected(false);
     });
 
     setSocket(newSocket);
@@ -92,7 +114,15 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           </div>
         ), { duration: 5000 });
 
-        setOrders(prev => [order, ...prev]);
+        setOrders(prev => {
+          const exists = prev.some(o => o.id === order.id);
+          if (exists) return prev;
+          return [order, ...prev];
+        });
+      });
+
+      newSocket.on('order-deleted', (orderId: string) => {
+        setOrders(prev => prev.filter(o => o.id !== orderId));
       });
     }
 
@@ -124,14 +154,20 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               "✨ Thank you for choosing Parking Latte! Enjoy your drink and have a wonderful day!",
               { duration: 6000, icon: '✨', style: { background: '#1a1f2e', color: '#fff', borderRadius: '24px', fontWeight: 'bold' } }
             );
+         } else if (updatedOrder.status === 'PREPARING') {
+            toast('Your order is being brewed! ☕', { icon: '🔥' });
+         } else if (updatedOrder.status === 'CANCELLED') {
+            toast.error('Order cancelled. Contact us for details.', { icon: '❌' });
          }
       }
 
       setOrders(prev => {
         const orderExists = prev.some(o => o.id === updatedOrder.id);
         if (orderExists) {
+          // Replace existing order while maintaining order
           return prev.map(o => o.id === updatedOrder.id ? updatedOrder : o);
         }
+        // Only add if it doesn't exist and user role is appropriate
         if (user.role === 'ADMIN' || user.role === 'STAFF') {
            return [updatedOrder, ...prev];
         }
@@ -142,12 +178,18 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => {
       newSocket.disconnect();
     };
-  }, [token, user?.id, fetchOrders]);
+  }, [token, user?.id, user?.role, fetchOrders]);
 
   const updateStatus = useCallback(async (id: string, status: OrderStatus, staffNotes?: string) => {
     try {
       const updatedOrder = await apiClient.patch(`/orders/${id}/status`, { status, staffNotes });
-      setOrders(prev => prev.map(o => o.id === id ? updatedOrder : o));
+      setOrders(prev => {
+        const exists = prev.some(o => o.id === updatedOrder.id);
+        if (exists) {
+          return prev.map(o => o.id === updatedOrder.id ? updatedOrder : o);
+        }
+        return prev;
+      });
     } catch (error) {
       toast.error('Failed to update status');
       throw error;
@@ -175,10 +217,11 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     staffQueueCount, 
     loading, 
     refreshing, 
+    socketConnected,
     fetchOrders, 
     updateStatus, 
     deleteOrder 
-  }), [orders, staffQueueCount, loading, refreshing, fetchOrders, updateStatus, deleteOrder]);
+  }), [orders, staffQueueCount, loading, refreshing, socketConnected, fetchOrders, updateStatus, deleteOrder]);
 
   return (
     <OrderContext.Provider value={value}>

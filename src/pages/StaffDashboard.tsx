@@ -1,9 +1,11 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useOrders } from '../context/OrderContext';
 import GlobalOrderFeed from '../components/GlobalOrderFeed';
 
 const StaffDashboard: React.FC = () => {
   const { user } = useAuth();
+  const { socketConnected } = useOrders();
   
   // Access check
   if (user?.role !== 'ADMIN' && user?.role !== 'STAFF') {
@@ -24,8 +26,10 @@ const StaffDashboard: React.FC = () => {
           <h1 className="text-4xl font-serif font-bold text-brand-primary mb-2">Kitchen Queue</h1>
           <p className="text-slate-500 font-medium italic lowercase tracking-wide">Maintain the flow, one cup at a time.</p>
         </div>
-        <div className="px-5 py-2 bg-brand-primary/10 rounded-2xl border border-brand-primary/20">
-          <span className="text-[10px] font-black uppercase tracking-widest text-brand-primary">Live Connection Active</span>
+        <div className={`px-5 py-2 rounded-2xl border transition-all duration-500 ${socketConnected ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20 shadow-lg shadow-red-500/10 animate-pulse'}`}>
+          <span className={`text-[10px] font-black uppercase tracking-widest ${socketConnected ? 'text-green-600' : 'text-red-600'}`}>
+            {socketConnected ? 'Live Connection Active' : 'Kitchen Offline - Reconnecting...'}
+          </span>
         </div>
       </div>
       

@@ -8,7 +8,6 @@ import Footer from './Footer';
 import toast from 'react-hot-toast';
 import { apiClient } from '../lib/api';
 import Sidebar from './Sidebar';
-import { io } from 'socket.io-client';
 import { Order, CartItem } from '../types';
 import { CartItemSkeleton } from './SkeletonLoader';
 import { ProductModal } from './ProductModal';
@@ -26,63 +25,6 @@ const Layout: React.FC = () => {
   const location = useLocation();
 
   const toggleSidebar = () => setIsSidebarCollapsed(!isSidebarCollapsed);
-
-  useEffect(() => {
-    if (!token || !user) return;
-
-    const socket = io('/', {
-      auth: { token },
-      transports: ['websocket', 'polling']
-    });
-
-    socket.on('connect', () => {
-      // Server automatically joins rooms based on token
-    });
-
-    socket.on('order-updated', (updatedOrder: Order) => {
-      // Show toast if not on the orders page
-      if (location.pathname !== '/orders') {
-        const statusMessages = {
-          'PREPARING': 'Your order is being brewed! ☕',
-          'COMPLETED': 'Order ready! Pick it up at the counter. ✨',
-          'CANCELLED': 'Order cancelled. Contact us for details. ❌',
-          'PENDING': 'Your order is in the queue.'
-        };
-
-        const message = statusMessages[updatedOrder.status] || `Order status: ${updatedOrder.status}`;
-        
-        toast((t) => (
-          <div 
-            onClick={() => {
-              navigate('/orders');
-              toast.dismiss(t.id);
-            }}
-            className="flex items-center gap-4 cursor-pointer"
-          >
-            <div className="bg-brand-primary p-2 rounded-lg text-white">
-              <Bell size={20} />
-            </div>
-            <div>
-              <p className="font-bold text-sm text-brand-primary">Order Update</p>
-              <p className="text-xs text-text-muted">{message}</p>
-            </div>
-          </div>
-        ), {
-          duration: 6000,
-          position: 'top-right',
-        });
-
-        if (updatedOrder.status === 'COMPLETED') {
-          const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-          audio.play().catch(() => {});
-        }
-      }
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, [user?.id, token, location.pathname, navigate]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -127,7 +69,18 @@ const Layout: React.FC = () => {
       navigate('/orders');
     } catch (err: any) {
       console.error('Checkout failed:', err);
-      toast.error(err.message || 'Failed to place order. Please check your connection.', { duration: 5000 });
+      
+      // Handle structured error responses from the refined server logic
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to place order';
+      const errorDetails = err.response?.data?.details;
+      
+      if (err.response?.status === 400 || err.response?.status === 409) {
+          toast.error(errorMessage, { duration: 6000, icon: '⚠️' });
+      } else if (err.response?.status === 503) {
+          toast.error('Database is warming up. Please wait 10 seconds and try again.', { duration: 7000 });
+      } else {
+          toast.error(errorDetails || errorMessage || 'Connection busy. Brewing failed.', { duration: 5000 });
+      }
     } finally {
         setIsSubmitting(false);
     }

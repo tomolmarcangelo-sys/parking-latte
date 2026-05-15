@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { apiClient } from '../lib/api';
 import { Order, OrderStatus } from '../types';
-import { Search, Calendar, ArrowUpDown, RefreshCw, Eye, Download } from 'lucide-react';
+import { Search, Calendar, ArrowUpDown, RefreshCw, ChevronRight, ChevronDown, Eye, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { AnimatePresence, motion } from 'motion/react';
 
 export const TransactionsTable: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -34,7 +36,7 @@ export const TransactionsTable: React.FC = () => {
   };
 
   const filteredAndSortedOrders = useMemo(() => {
-    return orders
+    const sorted = orders
       .filter((order) => {
         const matchesSearch = 
           order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -75,6 +77,14 @@ export const TransactionsTable: React.FC = () => {
         if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
         return 0;
       });
+
+    // Final safety check to filter out any duplicate IDs that might come from the API
+    const seen = new Set();
+    return sorted.filter(order => {
+      if (seen.has(order.id)) return false;
+      seen.add(order.id);
+      return true;
+    });
   }, [orders, searchQuery, statusFilter, dateRange, sortField, sortOrder]);
 
   const handleSort = (field: 'createdAt' | 'totalAmount' | 'id') => {
@@ -84,6 +94,10 @@ export const TransactionsTable: React.FC = () => {
       setSortField(field);
       setSortOrder('desc');
     }
+  };
+
+  const toggleOrderExpansion = (orderId: string) => {
+    setExpandedOrderId(expandedOrderId === orderId ? null : orderId);
   };
 
   const getStatusColor = (status: OrderStatus) => {
@@ -190,36 +204,102 @@ export const TransactionsTable: React.FC = () => {
                  </tr>
                ) : (
                  filteredAndSortedOrders.map((order, index) => (
-                   <tr key={order.id} className={`hover:bg-slate-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/80'}`}>
-                     <td className="px-6 py-4 font-mono text-sm font-bold text-slate-700">
-                        #{order.id.slice(0, 8)}
-                     </td>
-                     <td className="px-6 py-4">
-                        <p className="font-bold text-slate-900 text-sm">{order.user.name}</p>
-                        <p className="text-xs text-slate-500">{order.user.email}</p>
-                     </td>
-                     <td className="px-6 py-4 text-sm text-slate-600 font-medium">
-                        {new Date(order.createdAt).toLocaleString()}
-                     </td>
-                     <td className="px-6 py-4">
-                       <span className={`px-3 py-1 text-[10px] uppercase font-black tracking-widest border rounded-md ${getStatusColor(order.status)}`}>
-                         {order.status}
-                       </span>
-                     </td>
-                     <td className="px-6 py-4 text-sm font-black font-sans text-brand-primary">
-                        ₱{Number(order.totalAmount).toFixed(2)}
-                     </td>
-                     <td className="px-6 py-4">
-                        {order.staffNotes ? (
-                           <p className="text-xs text-slate-500 max-w-[200px] truncate" title={order.staffNotes}>{order.staffNotes}</p>
-                        ) : (
-                           <span className="text-xs text-slate-300 italic">-</span>
-                        )}
-                        {order.lastUpdatedBy && (
-                           <p className="text-[9px] uppercase tracking-wider text-slate-400 mt-1">By: {order.lastUpdatedBy}</p>
-                        )}
-                     </td>
-                   </tr>
+                   <React.Fragment key={order.id}>
+                     <tr 
+                       onClick={() => toggleOrderExpansion(order.id)}
+                       className={`cursor-pointer hover:bg-slate-100 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/80'} ${expandedOrderId === order.id ? 'bg-slate-100' : ''}`}
+                     >
+                       <td className="px-6 py-4 font-mono text-sm font-bold text-slate-700">
+                          <div className="flex items-center gap-2">
+                             {expandedOrderId === order.id ? <ChevronDown size={16} className="text-brand-primary" /> : <ChevronRight size={16} className="text-slate-400" />}
+                             #{order.id.slice(0, 8)}
+                          </div>
+                       </td>
+                       <td className="px-6 py-4">
+                          <p className="font-bold text-slate-900 text-sm">{order.user.name}</p>
+                          <p className="text-xs text-slate-500">{order.user.email}</p>
+                       </td>
+                       <td className="px-6 py-4 text-sm text-slate-600 font-medium">
+                          {new Date(order.createdAt).toLocaleString()}
+                       </td>
+                       <td className="px-6 py-4">
+                         <span className={`px-3 py-1 text-[10px] uppercase font-black tracking-widest border rounded-md ${getStatusColor(order.status)}`}>
+                           {order.status}
+                         </span>
+                       </td>
+                       <td className="px-6 py-4 text-sm font-black font-sans text-brand-primary">
+                          ₱{Number(order.totalAmount).toFixed(2)}
+                       </td>
+                       <td className="px-6 py-4">
+                          {order.staffNotes ? (
+                             <p className="text-xs text-slate-500 max-w-[200px] truncate" title={order.staffNotes}>{order.staffNotes}</p>
+                          ) : (
+                             <span className="text-xs text-slate-300 italic">-</span>
+                          )}
+                          {order.lastUpdatedBy && (
+                             <p className="text-[9px] uppercase tracking-wider text-slate-400 mt-1">By: {order.lastUpdatedBy}</p>
+                          )}
+                       </td>
+                     </tr>
+                     <AnimatePresence>
+                       {expandedOrderId === order.id && (
+                         <tr className="bg-slate-50/50">
+                           <td colSpan={6} className="px-0 py-0 border-b border-slate-100">
+                             <motion.div
+                               initial={{ height: 0, opacity: 0 }}
+                               animate={{ height: 'auto', opacity: 1 }}
+                               exit={{ height: 0, opacity: 0 }}
+                               transition={{ duration: 0.3, ease: 'easeInOut' }}
+                               className="overflow-hidden"
+                             >
+                               <div className="px-12 py-6">
+                                 <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                                    <h4 className="text-xs font-black uppercase tracking-widest text-brand-primary mb-5 flex items-center gap-2">
+                                      <Download size={14} />
+                                      Order Items Summary
+                                    </h4>
+                                    <div className="space-y-4">
+                                       {order.items.map((item) => (
+                                         <div key={item.id} className="flex justify-between items-center pb-4 border-b border-slate-50 last:border-0 last:pb-0">
+                                           <div className="flex gap-4 items-center">
+                                             <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                                                 {item.product.imageUrl ? (
+                                                   <img src={item.product.imageUrl} alt={item.product.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                                 ) : (
+                                                   <Eye className="text-slate-300" size={24} />
+                                                 )}
+                                             </div>
+                                             <div>
+                                                <div className="flex items-center gap-2">
+                                                   <span className="font-bold text-slate-900">{item.product.name}</span>
+                                                   <span className="text-xs px-2 py-0.5 bg-brand-primary text-white rounded font-mono font-bold">x{item.quantity}</span>
+                                                </div>
+                                                {item.customization && Object.keys(item.customization).length > 0 && (
+                                                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                                     {Object.entries(item.customization).map(([key, val]) => (
+                                                       <span key={key} className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded border border-slate-200 font-semibold">
+                                                         {key}: {Array.isArray(val) ? val.join(', ') : String(val)}
+                                                       </span>
+                                                     ))}
+                                                  </div>
+                                                )}
+                                             </div>
+                                           </div>
+                                           <div className="text-right">
+                                              <p className="font-black text-slate-900 text-sm">₱{(Number(item.priceAtOrder) * item.quantity).toFixed(2)}</p>
+                                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">₱{Number(item.priceAtOrder).toFixed(2)} / unit</p>
+                                           </div>
+                                         </div>
+                                       ))}
+                                    </div>
+                                 </div>
+                               </div>
+                             </motion.div>
+                           </td>
+                         </tr>
+                       )}
+                     </AnimatePresence>
+                   </React.Fragment>
                  ))
                )}
              </tbody>
