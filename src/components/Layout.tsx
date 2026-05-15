@@ -8,6 +8,7 @@ import Footer from './Footer';
 import toast from 'react-hot-toast';
 import { apiClient } from '../lib/api';
 import Sidebar from './Sidebar';
+import { io } from 'socket.io-client';
 import { Order, CartItem } from '../types';
 import { CartItemSkeleton } from './SkeletonLoader';
 import { ProductModal } from './ProductModal';

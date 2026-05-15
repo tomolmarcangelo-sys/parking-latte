@@ -60,13 +60,12 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return;
     }
 
-    const newSocket = io('/', {
+    const newSocket = io(window.location.origin, {
       auth: { token },
-      transports: ['polling', 'websocket'], // Prefer polling first to establish stable connection
+      transports: ['polling', 'websocket'],
       reconnectionAttempts: 10,
       reconnectionDelay: 2000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000
+      forceNew: true
     });
 
     newSocket.on('connect', () => {
@@ -131,6 +130,19 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       
       // Handle User-Specific Notifications (if the order belongs to the current user)
       if (updatedOrder.userId === user.id && oldOrder && oldOrder.status !== updatedOrder.status) {
+         // Generic status messages for users not on the orders page
+         if (window.location.pathname !== '/orders') {
+            const statusMessages = {
+              'PREPARING': 'Your order is being brewed! ☕',
+              'READY': 'Order ready! Pick it up at the counter. ✨',
+              'COMPLETED': 'Enjoy your drink! ✨',
+              'CANCELLED': 'Order cancelled. Contact us for details. ❌',
+              'PENDING': 'Your order is in the queue.'
+            };
+            const message = statusMessages[updatedOrder.status] || `Order status: ${updatedOrder.status}`;
+            toast.success(message, { duration: 5000, position: 'top-right' });
+         }
+
          if (updatedOrder.status === 'READY') {
             // Audio Feedback
             const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
@@ -143,7 +155,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                  <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
                        <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center text-white">☕</div>
-                       <h3 className="font-serif text-xl font-bold text-green-900 shadow-green-200">Your brew is ready!</h3>
+                       <h3 className="font-serif text-xl font-bold text-green-900">Your brew is ready!</h3>
                     </div>
                     <p className="text-sm font-bold text-green-800 opacity-80 pl-13">Head to the counter to pick up your {itemsSummary}.</p>
                  </div>
@@ -154,10 +166,6 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               "✨ Thank you for choosing Parking Latte! Enjoy your drink and have a wonderful day!",
               { duration: 6000, icon: '✨', style: { background: '#1a1f2e', color: '#fff', borderRadius: '24px', fontWeight: 'bold' } }
             );
-         } else if (updatedOrder.status === 'PREPARING') {
-            toast('Your order is being brewed! ☕', { icon: '🔥' });
-         } else if (updatedOrder.status === 'CANCELLED') {
-            toast.error('Order cancelled. Contact us for details.', { icon: '❌' });
          }
       }
 
