@@ -1,6 +1,7 @@
 import express from 'express';
 import { getPrismaClient } from '../db.js';
 import { authenticateAdmin } from '../middleware/auth.js';
+import { sendVerificationEmail } from '../lib/mail.js';
 
 export const adminRouter = express.Router();
 
@@ -233,6 +234,48 @@ adminRouter.delete('/customizations/choice/:id', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete choice' });
+  }
+});
+
+adminRouter.post('/resend-user-code', async (req: any, res) => {
+  const prisma = await getPrismaClient();
+  if (!prisma) return res.status(503).json({ error: 'Database not configured' });
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  try {
+    const normalizedEmail = email.toLowerCase();
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (user.isVerified) return res.status(400).json({ error: 'User already verified' });
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date(Date.now() + 15 * 60 * 1000);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { verificationCode: code, verificationExpires: expires }
+    });
+
+    await sendVerificationEmail(normalizedEmail, code);
+    
+    // Log the audit
+    await prisma.auditLog.create({
+      data: {
+        action: 'RESEND_VERIFICATION_CODE',
+        adminId: req.user.id,
+        adminName: req.user.name,
+        targetId: user.id,
+        targetName: user.name,
+        details: { email: normalizedEmail }
+      }
+    });
+
+    res.json({ message: 'Verification code resent' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to resend verification code' });
   }
 });
 

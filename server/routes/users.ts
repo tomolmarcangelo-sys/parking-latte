@@ -2,6 +2,7 @@ import express from 'express';
 import { getPrismaClient } from '../db.js';
 import { authenticateAdmin, authenticateUser } from '../middleware/auth.js';
 import bcrypt from 'bcryptjs';
+import { sendVerificationEmail } from '../lib/mail.js';
 
 export const usersRouter = express.Router();
 
@@ -99,9 +100,27 @@ usersRouter.post('/', async (req, res) => {
     if (password) {
       hashedPassword = await bcrypt.hash(password, 10);
     }
-    const user = await prisma.user.create({
-      data: { email, password: hashedPassword, name, role: role || 'CUSTOMER' }
+    
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date(Date.now() + 15 * 60 * 1000);
+    const normalizedEmail = email.toLowerCase();
+    
+    const user = await prisma.$transaction(async (tx) => {
+        return await tx.user.create({
+          data: { 
+              email: normalizedEmail,
+              password: hashedPassword, 
+              name, 
+              role: role || 'CUSTOMER',
+              isVerified: false,
+              verificationCode: code,
+              verificationExpires: expires
+          }
+        });
     });
+
+    await sendVerificationEmail(normalizedEmail, code);
+    
     const { password: _, ...userWithoutPassword } = user;
     res.json(userWithoutPassword);
   } catch (error) {

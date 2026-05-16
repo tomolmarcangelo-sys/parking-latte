@@ -294,6 +294,15 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleResendCode = async (email: string) => {
+      try {
+          await apiClient.post('/admin/resend-user-code', { email });
+          toast.success(`Verification code resent successfully to ${email}! ☕`);
+      } catch (err: any) {
+          toast.error(err.response?.data?.error || 'Failed to resend code');
+      }
+  }
+
   const handleRestock = async (itemId: string, amount: number) => {
     try {
       await apiClient.post(`/inventory/${itemId}/restock`, { amount });
@@ -630,6 +639,7 @@ const AdminDashboard: React.FC = () => {
                   <tr className="bg-slate-100 border-b border-slate-200">
                     <th className="px-6 py-4 text-xs font-bold font-serif text-[#1A1F2E] uppercase tracking-widest">Employee/User</th>
                     <th className="px-6 py-4 text-xs font-bold font-serif text-[#1A1F2E] uppercase tracking-widest">Authority Level</th>
+                    <th className="px-6 py-4 text-xs font-bold font-serif text-[#1A1F2E] uppercase tracking-widest text-center">Status</th>
                     <th className="px-6 py-4 text-xs font-bold font-serif text-[#1A1F2E] uppercase tracking-widest text-right">Clearance Actions</th>
                   </tr>
                 </thead>
@@ -665,6 +675,9 @@ const AdminDashboard: React.FC = () => {
                       </td>
                       <td className="px-6 py-4">
                         <RoleBadge role={u.role} loading={updatingUserId === u.id} />
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <VerificationBadge isVerified={u.isVerified} email={u.email} onResend={() => handleResendCode(u.email)} />
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-3">
@@ -2993,6 +3006,18 @@ const RoleBadge = ({ role, loading }: { role: Role, loading?: boolean }) => {
       )}
       {role}
     </span>
+  );
+};
+
+const VerificationBadge = ({ isVerified, email, onResend }: { isVerified: boolean, email: string, onResend: () => void }) => {
+  if (isVerified) {
+    return <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-green-200">Verified</span>;
+  }
+  return (
+    <div className="flex flex-col gap-1 items-end">
+      <span className="px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-amber-200">Pending</span>
+      <button className="text-[10px] text-brand-primary font-bold underline hover:no-underline" onClick={onResend}>Resend Code</button>
+    </div>
   );
 };
 
