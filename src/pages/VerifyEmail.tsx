@@ -6,52 +6,76 @@ import { CheckCircle2, XCircle, Loader2, Coffee, ArrowRight } from 'lucide-react
 
 const VerifyEmail: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const emailFromParam = searchParams.get('email');
+
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const navigate = useNavigate();
-  const token = searchParams.get('token');
-  const email = searchParams.get('email');
-
-  const [resendEmail, setResendEmail] = useState('');
+  
+  const [code, setCode] = useState(['', '', '', '', '', '']);
+  const [resendEmail] = useState(emailFromParam || '');
+  const inputs = React.useRef<(HTMLInputElement | null)[]>([]);
+  const [cooldown, setCooldown] = useState(0);
   const [resending, setResending] = useState(false);
   const [resendStatus, setResendStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
+  useEffect(() => {
+    if (cooldown > 0) {
+      const timer = setTimeout(() => setCooldown(cooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [cooldown]);
+
+  const handleInput = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return;
+    const newCode = [...code];
+    newCode[index] = value.slice(-1);
+    setCode(newCode);
+
+    if (value && index < 5) {
+      inputs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !code[index] && index > 0) {
+      inputs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const fullCode = code.join('');
+    if (fullCode.length !== 6) return;
+    
+    setStatus('loading');
+    try {
+      await apiClient.post('/auth/verify-code', { email: resendEmail, code: fullCode });
+      setStatus('success');
+      setMessage('Account successfully roasted! ☕');
+      setTimeout(() => navigate('/login?status=success'), 2000);
+    } catch (error: any) {
+      setStatus('error');
+      setMessage(error.response?.data?.error || 'Verification failed. The code may be invalid or expired.');
+    }
+  };
+
   const handleResend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!resendEmail) return;
+    if (!resendEmail || cooldown > 0) return;
     
     setResending(true);
     setResendStatus('idle');
     try {
       await apiClient.post('/auth/resend-verification', { email: resendEmail });
       setResendStatus('success');
+      setCooldown(60);
     } catch (err) {
       setResendStatus('error');
     } finally {
       setResending(false);
     }
   };
-
-  useEffect(() => {
-    const verify = async () => {
-      if (!token) {
-        setStatus('error');
-        setMessage('Missing verification token.');
-        return;
-      }
-
-      try {
-        const response = await apiClient.get(`/auth/verify-email?token=${token}&email=${email}`);
-        setStatus('success');
-        setMessage(response.data.message || 'Email verified successfully!');
-      } catch (error: any) {
-        setStatus('error');
-        setMessage(error.response?.data?.error || 'Verification failed. The link may be invalid or expired.');
-      }
-    };
-
-    verify();
-  }, [token]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-bg-base relative overflow-hidden">
@@ -60,25 +84,17 @@ const VerifyEmail: React.FC = () => {
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="max-w-md w-full bg-white dark:bg-bg-sidebar rounded-[3rem] p-12 coffee-shadow border border-border-subtle relative z-10 text-center"
+        className="max-w-md w-full bg-white dark:bg-bg-sidebar rounded-[3rem] p-10 md:p-12 coffee-shadow border border-slate-200 dark:border-slate-800 relative z-10 text-center"
       >
-        <div className="inline-block p-5 bg-brand-primary/5 rounded-[24px] mb-8 shadow-inner text-brand-primary">
+        <div className="inline-block p-5 bg-brand-primary/5 dark:bg-brand-primary/10 rounded-[24px] mb-8 shadow-inner text-brand-primary">
           <Coffee size={40} strokeWidth={1.5} />
         </div>
 
-        {status === 'loading' && (
-          <div className="space-y-6">
-            <Loader2 size={48} className="mx-auto text-brand-secondary animate-spin" />
-            <h1 className="text-2xl font-serif font-bold text-brand-primary">Verifying your account...</h1>
-            <p className="text-text-muted">Please wait while we confirm your email address.</p>
-          </div>
-        )}
-
-        {status === 'success' && (
+        {status === 'success' ? (
           <div className="space-y-6">
             <CheckCircle2 size={48} className="mx-auto text-brand-secondary" />
-            <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-100 tracking-tight">Email Verified!</h1>
-            <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed">{message}</p>
+            <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-slate-50 tracking-tight">Email Verified!</h1>
+            <p className="text-slate-600 dark:text-slate-400 font-medium leading-relaxed">{message}</p>
             <Link 
               to="/login"
               className="w-full inline-flex bg-brand-primary text-white py-5 rounded-2xl font-bold hover:bg-brand-secondary transition-all shadow-xl shadow-brand-primary/20 items-center justify-center gap-3"
@@ -86,62 +102,59 @@ const VerifyEmail: React.FC = () => {
               Proceed to Login <ArrowRight size={20} />
             </Link>
           </div>
-        )}
-
-        {status === 'error' && (
+        ) : (
           <div className="space-y-6">
-            <XCircle size={48} className="mx-auto text-brand-danger" />
+            <h1 className="text-3xl font-serif font-bold text-slate-900 dark:text-brand-primary">Verify Your Email</h1>
+            <p className="text-slate-600 dark:text-slate-400">Enter the 6-digit code sent to {resendEmail || 'your email'}.</p>
             
-            {message === 'Token expired' ? (
-              <h1 className="text-3xl font-serif font-bold text-brand-primary">Link Expired</h1>
-            ) : (
-              <h1 className="text-2xl font-serif font-bold text-brand-primary">Verification Failed</h1>
+            <form onSubmit={handleVerify} className="space-y-6">
+              <div className="flex justify-center gap-2 md:gap-3">
+                {code.map((digit, index) => (
+                  <input
+                    key={index}
+                    ref={(el) => { inputs.current[index] = el; }}
+                    type="text"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleInput(index, e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(index, e)}
+                    className="w-12 h-16 md:w-14 md:h-18 rounded-2xl bg-white dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/10 outline-none text-2xl md:text-3xl text-center font-serif font-bold text-slate-900 dark:text-white transition-all shadow-sm"
+                  />
+                ))}
+              </div>
+              <button 
+                type="submit"
+                disabled={status === 'loading'}
+                className="w-full bg-brand-primary text-white py-5 rounded-2xl font-bold hover:bg-brand-secondary transition-all disabled:opacity-50"
+              >
+                {status === 'loading' ? 'Verifying...' : 'Verify Code'}
+              </button>
+            </form>
+            
+            {status === 'error' && (
+              <p className="text-xs text-brand-danger font-bold">{message}</p>
             )}
 
-            <p className="text-text-muted">
-              {message === 'Token expired' 
-                ? 'This link has expired. Click below to receive a fresh verification link.'
-                : message}
-            </p>
-            
-            <div className="bg-bg-sidebar/30 p-6 rounded-[2rem] border border-border-subtle/50">
-              <p className="text-xs font-bold text-text-muted mb-4">Request a new verification link:</p>
-              <form onSubmit={handleResend} className="space-y-3">
-                <input 
-                  type="email" 
-                  placeholder="Your email address"
-                  required
-                  value={resendEmail}
-                  onChange={(e) => setResendEmail(e.target.value)}
-                  className="w-full p-3 rounded-xl bg-white border border-border-subtle focus:border-brand-primary outline-none text-sm transition-all"
-                />
-                <button 
-                  type="submit"
-                  disabled={resending}
-                  className="w-full bg-brand-primary text-white py-3 rounded-xl font-bold hover:bg-brand-secondary transition-all text-sm disabled:opacity-50"
-                >
-                  {resending ? 'Sending...' : 'Resend Link'}
-                </button>
-              </form>
+            <div className="bg-slate-50 dark:bg-slate-900/40 p-6 rounded-[2rem] border border-slate-200 dark:border-slate-800/50">
+              <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-4">Didn't receive a code?</p>
+              <button 
+                onClick={handleResend}
+                disabled={resending || cooldown > 0}
+                className="w-full bg-transparent text-brand-primary border-2 border-brand-primary/30 py-3 rounded-xl font-bold hover:bg-brand-primary/10 transition-all text-sm disabled:opacity-50"
+              >
+                {resending ? 'Sending...' : cooldown > 0 ? `Resend code in ${cooldown}s` : 'Resend Code'}
+              </button>
               {resendStatus === 'success' && (
-                <p className="text-[10px] text-brand-primary mt-3 font-bold">A new brew is on its way to your inbox! ☕</p>
+                <p className="text-[10px] text-brand-primary mt-3 font-bold">A new code is on its way to your inbox! ☕</p>
               )}
               {resendStatus === 'error' && (
                 <p className="text-[10px] text-brand-danger mt-3 font-bold">Failed to send. Please try again.</p>
               )}
             </div>
-
-            <div className="pt-4 flex flex-col gap-4">
-              <Link 
-                to="/register"
-                className="w-full text-brand-primary py-4 rounded-2xl font-bold hover:bg-brand-primary/5 transition-all inline-flex items-center justify-center gap-3 border border-brand-primary/20"
-              >
-                Create New Account
-              </Link>
-              <Link to="/login" className="text-sm font-bold text-brand-secondary hover:underline">
-                Back to Login
-              </Link>
-            </div>
+            
+            <Link to="/login" className="text-sm font-bold text-brand-secondary hover:underline">
+              Back to Login
+            </Link>
           </div>
         )}
       </motion.div>

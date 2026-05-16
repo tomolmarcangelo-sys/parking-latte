@@ -22,6 +22,19 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Load guest cart from localStorage on init
+  useEffect(() => {
+    const savedCart = localStorage.getItem('parking_latte_guest_cart');
+    if (savedCart) {
+      try {
+        setCart(JSON.parse(savedCart));
+      } catch (e) {
+        console.error('Failed to parse guest cart', e);
+      }
+    }
+  }, []);
+
+  // Sync with token
   useEffect(() => {
     if (token) {
       fetch('/api/cart', {
@@ -29,7 +42,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
       .then(res => res.json())
       .then(data => {
+        // Simple merge: for now, prioritize backend over localStorage.
+        // A smarter merge would reconcile.
         setCart(data);
+        localStorage.removeItem('parking_latte_guest_cart');
         setIsLoading(false);
       })
       .catch(() => {
@@ -40,6 +56,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
     }
   }, [token]);
+
+  // Persist cart to localStorage whenever it changes
+  useEffect(() => {
+    if (!token) {
+      localStorage.setItem('parking_latte_guest_cart', JSON.stringify(cart));
+    }
+  }, [cart, token]);
 
   const calculateItemPrice = useCallback((item: CartItem | Product, selectedChoices?: CustomizationChoice[]) => {
     const product = (item as CartItem).product || (item as Product);
@@ -74,97 +97,107 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const addToCart = useCallback(async (product: Product, customization?: Record<string, string | string[]>, _selectedChoices?: CustomizationChoice[], quantity: number = 1) => {
-    if (!token) return;
-    
-    try {
-      const response = await fetch('/api/cart', {
-        method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}` 
-        },
-        body: JSON.stringify({ productId: product.id, quantity, customization })
-      });
-      const newItem = await response.json();
-      
+      // Optimistic update
+      const newItem: CartItem = {
+          id: Date.now().toString(), // Temp ID for guest
+          userId: 'guest',
+          productId: product.id,
+          product,
+          quantity,
+          customization: customization || {},
+      };
+
       setCart(prev => {
-          const existingItemIndex = prev.findIndex(item => item.id === newItem.id);
-          if (existingItemIndex > -1) {
-              const newCart = [...prev];
-              newCart[existingItemIndex] = newItem;
-              return newCart;
-          }
+          // This logic matches backend-like behavior but is simplistic for now
           return [...prev, newItem];
       });
 
-      toast.success('Added to bag');
-    } catch {
-      toast.error('Failed to add to bag');
-    }
+      toast.success('Added to your guest bag! ☕');
+
+      if (token) {
+        try {
+          const response = await fetch('/api/cart', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` 
+            },
+            body: JSON.stringify({ productId: product.id, quantity, customization })
+          });
+          const serverItem = await response.json();
+          // Replace temp item with server item
+          setCart(prev => prev.map(item => item.id === newItem.id ? serverItem : item));
+        } catch {
+          toast.error('Failed to sync item to server');
+        }
+      }
   }, [token]);
 
   const updateCartItem = useCallback(async (cartItemId: string, customization: Record<string, string | string[]>) => {
-    if (!token) return;
+    setCart(prev => prev.map(item => item.id === cartItemId ? { ...item, customization } : item));
     
-    try {
-      const response = await fetch(`/api/cart/${cartItemId}`, {
-        method: 'PUT',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}` 
-        },
-        body: JSON.stringify({ customization })
-      });
-      const updatedItem = await response.json();
-      setCart(prev => prev.map(item => item.id === cartItemId ? updatedItem : item));
-      toast.success('Updated brew');
-    } catch {
-      toast.error('Failed to update brew');
+    if (token) {
+        try {
+          const response = await fetch(`/api/cart/${cartItemId}`, {
+            method: 'PUT',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` 
+            },
+            body: JSON.stringify({ customization })
+          });
+          const updatedItem = await response.json();
+          setCart(prev => prev.map(item => item.id === cartItemId ? updatedItem : item));
+          toast.success('Updated bag');
+        } catch {
+          toast.error('Failed to sync update');
+        }
+    } else {
+        toast.success('Updated bag');
     }
   }, [token]);
 
   const removeFromCart = useCallback(async (cartItemId: string) => {
-    if (!token) return;
-    
     setCart(prev => prev.filter(item => item.id !== cartItemId));
     
-    try {
-      await fetch(`/api/cart/${cartItemId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      toast.success('Removed from bag');
-    } catch {
-      // Re-fetch cart on error to be safe instead of manual rollback
-      fetch('/api/cart', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      .then(res => res.json())
-      .then(data => setCart(data));
-      toast.error('Failed to remove item');
+    if (token) {
+        try {
+          await fetch(`/api/cart/${cartItemId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          toast.success('Removed from bag');
+        } catch {
+          toast.error('Failed to sync removal');
+        }
+    } else {
+        toast.success('Removed from bag');
     }
   }, [token]);
 
   const updateQuantity = useCallback(async (cartItemId: string, quantity: number) => {
-    if (!token) return;
-    
     setCart(prev => prev.map(item => item.id === cartItemId ? { ...item, quantity } : item));
     
-    try {
-      await fetch(`/api/cart/${cartItemId}`, {
-        method: 'PUT',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}` 
-        },
-        body: JSON.stringify({ quantity })
-      });
-    } catch {
-      toast.error('Failed to update quantity');
+    if (token) {
+        try {
+          await fetch(`/api/cart/${cartItemId}`, {
+            method: 'PUT',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` 
+            },
+            body: JSON.stringify({ quantity })
+          });
+        } catch {
+          toast.error('Failed to update quantity');
+        }
     }
   }, [token]);
 
-  const clearCart = useCallback(() => setCart([]), []);
+  const clearCart = useCallback(() => {
+      setCart([]);
+      localStorage.removeItem('parking_latte_guest_cart');
+  }, []);
 
   const total = useMemo(() => {
     return cart.reduce((acc, item) => acc + calculateItemPrice(item) * item.quantity, 0);

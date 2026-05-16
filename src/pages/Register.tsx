@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Coffee, ArrowRight, Eye, EyeOff, Loader2, MailCheck, CheckCircle2, Circle, ArrowLeft } from 'lucide-react';
+import { Coffee, ArrowRight, Eye, EyeOff, Loader2, CheckCircle2, Circle, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../lib/api';
 import { motion, AnimatePresence } from 'motion/react';
@@ -14,7 +14,6 @@ const Register: React.FC = () => {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -51,8 +50,8 @@ const Register: React.FC = () => {
     try {
       const data = await apiClient.post('/auth/register', { email, password, name });
       if (data.requiresVerification) {
-        setSuccess(true);
         toast.success('Registration successful! Please check your email.');
+        navigate(`/verify-email?email=${encodeURIComponent(email)}`);
       } else if (data.token) {
         // Fallback or old behavior
         login(data.token, data.user);
@@ -67,75 +66,6 @@ const Register: React.FC = () => {
       setLoading(false);
     }
   };
-
-  const [resending, setResending] = useState(false);
-  const [resendStatus, setResendStatus] = useState<'idle' | 'success' | 'error'>('idle');
-
-  const handleResendVerification = async () => {
-    setResending(true);
-    setResendStatus('idle');
-    try {
-      await apiClient.post('/auth/resend-verification', { email });
-      setResendStatus('success');
-      toast.success('Verification link resent!');
-    } catch (err) {
-      setResendStatus('error');
-      toast.error('Failed to resend verification link.');
-    } finally {
-      setResending(false);
-    }
-  };
-
-  if (success) {
-    return (
-    <div className="min-h-screen flex flex-col bg-bg-base relative overflow-hidden">
-      <AuthNavbar />
-      <div className="flex-1 flex items-center justify-center p-4">
-        <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-20">
-           <div className="absolute top-10 left-10 w-64 h-64 bg-brand-primary rounded-full blur-[120px]"></div>
-        </div>
-
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="max-w-md w-full bg-slate-900/50 backdrop-blur-xl rounded-[3.5rem] p-12 shadow-2xl border border-slate-800 relative z-10 text-center"
-        >
-          <div className="inline-block p-6 bg-brand-primary/10 rounded-[28px] mb-8 border border-brand-primary/20 text-brand-secondary shadow-lg shadow-brand-primary/10">
-            <MailCheck size={48} strokeWidth={1.5} className="animate-pulse" />
-          </div>
-          <h1 className="text-4xl font-serif font-bold text-white mb-4 tracking-tight">Check Your Email</h1>
-          <p className="text-slate-400 mb-8 leading-relaxed text-sm">
-            We've sent a sophisticated verification link to <br/>
-            <span className="font-bold text-brand-secondary text-base block mt-2 underline decoration-brand-secondary/30">{email}</span> 
-          </p>
-          
-          <div className="mb-10 p-6 bg-slate-950/50 rounded-3xl border border-slate-800/50">
-            <button 
-              onClick={handleResendVerification}
-              disabled={resending}
-              className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 hover:text-brand-secondary transition-all disabled:opacity-50"
-            >
-              {resending ? 'Dispatching...' : "Didn't receive the invite? Resend"}
-            </button>
-            {resendStatus === 'success' && (
-              <p className="text-[10px] font-bold text-brand-secondary mt-3 uppercase tracking-widest">New verification link dispatched!</p>
-            )}
-            {resendStatus === 'error' && (
-              <p className="text-[10px] font-bold text-brand-danger mt-3 uppercase tracking-widest">Courier failed. Please retry.</p>
-            )}
-          </div>
-
-          <Link 
-            to="/login"
-            className="w-full inline-flex bg-brand-primary text-white py-5 rounded-2xl font-bold hover:bg-brand-secondary transition-all items-center justify-center gap-3 shadow-xl shadow-brand-primary/20 active:scale-95"
-          >
-            Return to Login <ArrowRight size={20} />
-          </Link>
-        </motion.div>
-      </div>
-    </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex flex-col bg-bg-base relative overflow-hidden">

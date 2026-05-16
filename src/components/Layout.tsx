@@ -44,7 +44,7 @@ const Layout: React.FC = () => {
 
   const handleCheckout = async () => {
     if (!user) {
-      navigate('/login');
+      navigate('/login?redirect=cart');
       setIsCartOpen(false);
       return;
     }
@@ -280,8 +280,13 @@ const Layout: React.FC = () => {
                   className="w-full bg-brand-primary text-white py-5 rounded-[20px] font-bold disabled:opacity-50 hover:bg-brand-secondary hover:-translate-y-1 transition-all shadow-xl shadow-brand-primary/20 flex items-center justify-center gap-3"
                 >
                   {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : <ShoppingCart size={20} />}
-                  <span>{isSubmitting ? 'Brewing your order...' : 'Begin Pouring Order'}</span>
+                  <span>{user ? (isSubmitting ? 'Brewing your order...' : 'Begin Pouring Order') : 'Sign In to Brew Your Bag'}</span>
                 </button>
+                {!user && (
+                    <p className="mt-4 text-xs font-medium text-center text-slate-500 italic">
+                        Guests can fill their bag, but a quick account registration is required to start roasting and brewing your order.
+                    </p>
+                )}
               </div>
             </motion.div>
           </>

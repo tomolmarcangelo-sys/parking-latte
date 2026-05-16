@@ -72,16 +72,17 @@ const getBaseTemplate = (title: string, content: string, cta?: { label: string, 
   `;
 };
 
-export const sendVerificationEmail = async (email: string, token: string) => {
-  const baseUrl = process.env.FRONTEND_URL?.replace(/\/+$/, '');
-  const verificationUrl = `${baseUrl}/verify-email?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+export const sendVerificationEmail = async (email: string, code: string) => {
   const html = getBaseTemplate(
     'Verify Your Identity',
-    '<p>Welcome to the family. To complete your registration and start your Parking Latte experience, please confirm your email address.</p>',
-    { label: 'Verify Email Address', url: verificationUrl }
+    `<p>Welcome to the family. To complete your registration and start your Parking Latte experience, please enter the following 6-digit code in the app:</p>
+     <div style="background-color: #f8fafc; padding: 20px; text-align: center; border-radius: 12px; font-size: 32px; font-weight: bold; color: #0f172a; margin: 20px 0; letter-spacing: 0.2em;">
+       ${code}
+     </div>
+     <p>This code will expire in 15 minutes.</p>`,
   );
 
-  const text = `Welcome to Parking Latte!\n\nPlease verify your email address by clicking the link below:\n${verificationUrl}\n\nThank you,\nParking Latte Team`;
+  const text = `Welcome to Parking Latte!\n\nYour verification code is: ${code}\n\nThank you,\nParking Latte Team`;
 
   await sendMail(email, 'Confirm Your Parking Latte Account', html, text);
 };

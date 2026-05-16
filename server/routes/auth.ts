@@ -133,18 +133,18 @@ authRouter.post('/resend-verification', async (req, res) => {
 
     resendRateLimit.set(email, Date.now());
 
-    const token = crypto.randomBytes(32).toString('hex');
-    const hashedToken = await bcrypt.hash(token, 10);
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedCode = await bcrypt.hash(code, 10);
 
     await prisma.user.update({
       where: { id: user.id },
       data: {
-        verificationCode: hashedToken,
-        verificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        verificationCode: hashedCode,
+        verificationExpires: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
       }
     });
 
-    await sendVerificationEmail(email, token);
+    await sendVerificationEmail(email, code);
 
     res.json({ message: 'Verification email sent' });
   } catch (error) {
@@ -166,21 +166,21 @@ authRouter.post('/register', async (req, res) => {
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) return res.status(400).json({ error: 'Email already registered' });
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const token = crypto.randomBytes(32).toString('hex');
-    const hashedToken = await bcrypt.hash(token, 10);
+    const passwordHashed = await bcrypt.hash(password, 10);
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedCode = await bcrypt.hash(code, 10);
 
     const user = await prisma.user.create({
       data: {
         email,
-        password: hashedPassword,
+        password: passwordHashed,
         name,
-        verificationCode: hashedToken,
-        verificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        verificationCode: hashedCode,
+        verificationExpires: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
       }
     });
 
-    await sendVerificationEmail(email, token);
+    await sendVerificationEmail(email, code);
 
     res.status(201).json({ message: 'User registered, check email', requiresVerification: true });
   } catch (error) {
@@ -207,10 +207,10 @@ authRouter.put('/profile', authenticateUser, async (req: any, res) => {
   }
 });
 
-authRouter.get('/verify-email', async (req, res) => {
-  const { token, email } = req.query;
-  if (!token || !email || typeof token !== 'string' || typeof email !== 'string') {
-    return res.redirect(`${process.env.FRONTEND_URL}/verify-error?reason=invalid`);
+authRouter.post('/verify-code', async (req, res) => {
+  const { email, code } = req.body;
+  if (!email || !code || typeof email !== 'string' || typeof code !== 'string') {
+    return res.status(400).json({ error: 'Missing email/code' });
   }
 
   const prisma = await getPrismaClient();
@@ -218,6 +218,7 @@ authRouter.get('/verify-email', async (req, res) => {
 
   try {
     const emailLower = email.toLowerCase();
+    const sanitizedCode = code.replace(/\D/g, '');
     
     // Perform lookup and update within a transaction to avoid race conditions
     const result = await prisma.$transaction(async (tx) => {
@@ -232,8 +233,8 @@ authRouter.get('/verify-email', async (req, res) => {
         throw new Error('expired');
       }
 
-      const isValidToken = await bcrypt.compare(token, user.verificationCode);
-      if (!isValidToken) throw new Error('invalid');
+      const isValidCode = await bcrypt.compare(sanitizedCode, user.verificationCode);
+      if (!isValidCode) throw new Error('invalid');
 
       return await tx.user.update({
           where: { id: user.id },
@@ -241,10 +242,10 @@ authRouter.get('/verify-email', async (req, res) => {
       });
     });
 
-    res.redirect(`${process.env.FRONTEND_URL}/login?status=success`);
+    res.json({ message: 'Email verified successfully!' });
   } catch (error: any) {
     console.error(error);
     const reason = error.message === 'expired' ? 'expired' : 'invalid';
-    res.redirect(`${process.env.FRONTEND_URL}/verify-error?reason=${reason}`);
+    res.status(400).json({ error: reason === 'expired' ? 'Code expired' : 'Invalid code' });
   }
 });
