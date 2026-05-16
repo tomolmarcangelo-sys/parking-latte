@@ -303,14 +303,29 @@ const AdminDashboard: React.FC = () => {
       }
   }
 
+  const handleVerifyUser = async (email: string, code: string) => {
+    try {
+      await apiClient.post('/auth/verify-code', { email, code });
+      toast.success('User verified successfully!');
+      setUsers(prev => prev.map(u => u.email === email ? { ...u, isVerified: true } : u));
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to verify user');
+    }
+  };
+
+  const [restockingItemId, setRestockingItemId] = useState<string | null>(null);
+
   const handleRestock = async (itemId: string, amount: number) => {
+    setRestockingItemId(itemId);
     try {
       await apiClient.post(`/inventory/${itemId}/restock`, { amount });
       fetchData();
-      alert('Stock updated successfully.');
-    } catch (err) {
+      toast.success('Stock updated successfully.');
+    } catch (err: any) {
       console.error('Restock failed:', err);
-      alert('Failed to restock.');
+      toast.error(err.response?.data?.message || 'Failed to restock.');
+    } finally {
+      setRestockingItemId(null);
     }
   };
 
@@ -600,11 +615,13 @@ const AdminDashboard: React.FC = () => {
                             handleRestock(item.id, parseInt(amount));
                           }
                         }}
+                        disabled={restockingItemId === item.id}
                         className={`mt-2 text-[10px] text-white px-3 py-1.5 rounded-lg font-bold transition-colors w-full shadow-sm hover:scale-105 ${
                           isCritical ? 'bg-brand-primary dark:bg-brand-secondary hover:bg-brand-danger transition-all' : 'bg-slate-900 dark:bg-brand-primary'
-                        }`}
+                        } ${restockingItemId === item.id ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
-                        Restock {item.name}
+                        {restockingItemId === item.id ? <RefreshCw size={12} className="animate-spin inline mr-1" /> : null}
+                        {restockingItemId === item.id ? 'Restocking...' : `Restock ${item.name}`}
                       </button>
                     </motion.div>
                   );
@@ -677,7 +694,7 @@ const AdminDashboard: React.FC = () => {
                         <RoleBadge role={u.role} loading={updatingUserId === u.id} />
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <VerificationBadge isVerified={u.isVerified} email={u.email} onResend={() => handleResendCode(u.email)} />
+                        <VerificationBadge isVerified={u.isVerified} email={u.email} onResend={() => handleResendCode(u.email)} onVerify={(code) => handleVerifyUser(u.email, code)} />
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-3">
@@ -822,10 +839,11 @@ const AdminDashboard: React.FC = () => {
                                   handleRestock(item.id, parseInt(amount));
                                 }
                               }}
-                              className="p-2 hover:text-[#1A1F2E] transition-colors"
+                              disabled={restockingItemId === item.id}
+                              className={`p-2 hover:text-[#1A1F2E] transition-colors ${restockingItemId === item.id ? 'opacity-50 cursor-not-allowed' : ''}`}
                               title="Replenish"
                             >
-                               <RefreshCw size={16} />
+                               <RefreshCw size={16} className={restockingItemId === item.id ? 'animate-spin' : ''} />
                             </button>
                              <button 
                               onClick={() => setEditingInventory(item)}
@@ -3009,14 +3027,38 @@ const RoleBadge = ({ role, loading }: { role: Role, loading?: boolean }) => {
   );
 };
 
-const VerificationBadge = ({ isVerified, email, onResend }: { isVerified: boolean, email: string, onResend: () => void }) => {
+const VerificationBadge = ({ isVerified, email, onResend, onVerify }: { isVerified: boolean, email: string, onResend: () => void, onVerify: (code: string) => void }) => {
+  const [code, setCode] = useState('');
   if (isVerified) {
     return <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-green-200">Verified</span>;
   }
   return (
     <div className="flex flex-col gap-1 items-end">
-      <span className="px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-amber-200">Pending</span>
-      <button className="text-[10px] text-brand-primary font-bold underline hover:no-underline" onClick={onResend}>Resend Code</button>
+      <div className="flex items-center gap-2">
+        <span className="px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-amber-200">Pending</span>
+        <button className="text-[10px] text-brand-primary font-bold underline hover:no-underline whitespace-nowrap" onClick={onResend}>Resend Code</button>
+      </div>
+      <div className="flex items-center gap-1 mt-1">
+        <input 
+          type="text" 
+          maxLength={6} 
+          placeholder="6-digit code" 
+          value={code} 
+          onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          className="w-24 px-2 py-1 text-xs border border-slate-200 rounded outline-none focus:border-[#1A1F2E] text-center tracking-widest font-mono"
+        />
+        <button 
+          onClick={() => {
+            if (code.length === 6) {
+               onVerify(code);
+            }
+          }}
+          disabled={code.length !== 6}
+          className="p-1 px-2 text-[10px] bg-[#1A1F2E] text-white rounded font-bold disabled:opacity-50"
+        >
+          Verify
+        </button>
+      </div>
     </div>
   );
 };
