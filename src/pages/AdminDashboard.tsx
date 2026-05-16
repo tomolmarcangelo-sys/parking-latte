@@ -1,9 +1,8 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { apiClient } from '../lib/api';
 import { InventoryItem, Category, User, Role, CustomizationGroup, Product } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Package, Plus, BarChart3, TrendingUp, AlertTriangle, X, Coffee, Download, Users, Shield, Check, Settings2, Trash2, Edit3, Link as LinkIcon, Info, ImagePlus, Upload, History, ArrowRight, Search, KeyRound, RefreshCw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Eye, EyeOff, Terminal, Save, User as UserIcon } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { Package, Plus, BarChart3, TrendingUp, AlertTriangle, X, Coffee, Download, Users, Shield, Check, Settings2, Trash2, Edit3, Link as LinkIcon, Info, ImagePlus, Upload, History, ArrowRight, Search, KeyRound, RefreshCw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Eye, EyeOff, Terminal, Save, User as UserIcon, MoreHorizontal } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { SearchableSelect } from '../components/SearchableSelect';
 import { CreateUserModal } from '../components/CreateUserModal';
@@ -11,23 +10,37 @@ import { UserEditModal } from '../components/UserEditModal';
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { toast } from 'react-hot-toast';
 import { TransactionsTable } from '../components/TransactionsTable';
+import SkeletonLoader from '../components/SkeletonLoader';
+import { ProductDemandChart } from '../components/ProductDemandChart';
+import { StockInventoryList } from '../components/StockInventoryList';
 
 const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'products' | 'variations' | 'categories' | 'inventory' | 'audit-logs' | 'transactions'>('overview');
+  const [loading, setLoading] = useState(true);
+  const [sectionLoading, setSectionLoading] = useState<Record<string, boolean>>({
+    overview: false,
+    users: false,
+    inventory: false,
+    products: false,
+    variations: false,
+    categories: false,
+    'audit-logs': false,
+    transactions: false
+  });
   
   const [stats, setStats] = useState<any>(null);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
-  const [auditPagination, setAuditPagination] = useState<any>(null);
+  const [customizations, setCustomizations] = useState<any[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [auditPagination, setAuditPagination] = useState<any>(null);
   const [auditActionFilter, setAuditActionFilter] = useState('');
   const [auditAdminFilter, setAuditAdminFilter] = useState('');
   const [auditDistinctActions, setAuditDistinctActions] = useState<string[]>([]);
-  const [customizations, setCustomizations] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false);
@@ -121,9 +134,73 @@ const AdminDashboard: React.FC = () => {
     }
   }, [activeTab, user]);
 
+  const fetchTabContent = useCallback(async (tab: typeof activeTab) => {
+    setSectionLoading(prev => ({ ...prev, [tab]: true }));
+    try {
+      switch (tab) {
+        case 'overview':
+          const [statsData, invData] = await Promise.all([
+            apiClient.get('/admin/stats'),
+            apiClient.get('/inventory')
+          ]);
+          setStats(statsData);
+          setInventory(invData);
+          break;
+        case 'users':
+          const usersData = await apiClient.get('/users');
+          setUsers(usersData);
+          break;
+        case 'inventory':
+          const [invDataForList, menuDataForInv, customDataForInv] = await Promise.all([
+            apiClient.get('/inventory'),
+            apiClient.get('/menu?admin=true'),
+            apiClient.get('/admin/customizations').catch(() => [])
+          ]);
+          setInventory(invDataForList);
+          setCategories(menuDataForInv);
+          setCustomizations(customDataForInv);
+          break;
+        case 'products':
+          const [menuDataForProds, invDataForProds, customDataForProds] = await Promise.all([
+            apiClient.get('/menu?admin=true'),
+            apiClient.get('/inventory'),
+            apiClient.get('/admin/customizations').catch(() => [])
+          ]);
+          setCategories(menuDataForProds);
+          setInventory(invDataForProds);
+          setCustomizations(customDataForProds);
+          break;
+        case 'categories':
+          const catsData = await apiClient.get('/menu/categories');
+          setCategoryList(catsData);
+          break;
+        case 'audit-logs':
+          await fetchAuditLogs(1, false);
+          break;
+        case 'variations':
+          const [custData, menuForCust] = await Promise.all([
+            apiClient.get('/admin/customizations'),
+            apiClient.get('/menu?admin=true')
+          ]);
+          setCustomizations(custData);
+          setCategories(menuForCust);
+          break;
+      }
+    } catch (err) {
+      console.error(`Failed to fetch ${tab} data:`, err);
+    } finally {
+      setSectionLoading(prev => ({ ...prev, [tab]: false }));
+      setLoading(false);
+    }
+  }, [user]);
+
   useEffect(() => {
-    fetchData();
-  }, []);
+    fetchTabContent(activeTab);
+  }, [activeTab, fetchTabContent]);
+
+  const fetchData = () => {
+    fetchTabContent(activeTab);
+  };
 
   const allProducts = useMemo(() => categories.flatMap(c => c.products), [categories]);
   
@@ -147,34 +224,6 @@ const AdminDashboard: React.FC = () => {
       item.name.toLowerCase().includes(inventorySearch.toLowerCase())
     );
   }, [inventory, inventorySearch]);
-
-  const fetchData = () => {
-    setLoading(true);
-    const promises: Promise<any>[] = [
-      apiClient.get('/admin/stats'),
-      apiClient.get('/inventory'),
-      apiClient.get('/menu?admin=true'),
-      apiClient.get('/users'),
-      apiClient.get('/menu/categories'),
-    ];
-
-    if (user?.role !== 'STAFF') {
-      promises.push(apiClient.get('/admin/customizations'));
-    }
-
-    Promise.all(promises).then((results) => {
-      const [statsData, invData, menuData, userData, categoryData, customData] = results;
-      setStats(statsData);
-      setInventory(invData);
-      setCategories(menuData);
-      setUsers(userData);
-      setCategoryList(categoryData);
-      if (user?.role !== 'STAFF') {
-        setCustomizations(customData);
-      }
-      setLoading(false);
-    });
-  };
 
   const fetchAuditLogs = async (page: number = 1, append: boolean = false) => {
     if (user?.role === 'STAFF') return;
@@ -233,7 +282,7 @@ const AdminDashboard: React.FC = () => {
         name: userToUpdate.name || '',
         email: userToUpdate.email,
         role,
-        emailVerified: userToUpdate.emailVerified 
+        isVerified: userToUpdate.isVerified 
       });
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
       toast.success('User role updated');
@@ -286,10 +335,12 @@ const AdminDashboard: React.FC = () => {
   const handleExportOrders = async () => {
     setIsExporting(true);
     try {
-      const orders = await apiClient.get('/orders');
+      // Fetch more for export
+      const resp = await apiClient.get('/orders?limit=1000');
+      const ordersArray = Array.isArray(resp) ? resp : (resp?.orders || []);
       
       const headers = ['Order ID', 'Customer', 'Email', 'Status', 'Total (₱)', 'Date', 'Items'];
-      const rows = orders.map((order: any) => [
+      const rows = ordersArray.map((order: any) => [
         order.id,
         order.user.name || 'N/A',
         order.user.email,
@@ -470,24 +521,36 @@ const AdminDashboard: React.FC = () => {
         <>
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <StatCard 
-              icon={<TrendingUp className="text-[#1A1F2E]" />} 
-              label="Total Revenue" 
-              value={`₱${Number(stats?.totalRevenue || 0).toFixed(2)}`} 
-            />
-            <StatCard 
-              icon={<Package className="text-[#1A1F2E]" />} 
-              label="Total Orders" 
-              value={stats?.totalOrders || 0} 
-            />
-            <StatCard 
-              icon={<Plus className="text-[#1A1F2E]" />} 
-              label="Orders Today" 
-              value={stats?.todayOrders || 0} 
-            />
+            {sectionLoading.overview && !stats ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-64 flex flex-col items-center justify-center gap-4">
+                  <SkeletonLoader className="w-16 h-16 rounded-xl" />
+                  <SkeletonLoader className="w-24 h-4" />
+                  <SkeletonLoader className="w-32 h-10" />
+                </div>
+              ))
+            ) : (
+              <>
+                <StatCard 
+                  icon={<TrendingUp className="text-[#1A1F2E]" />} 
+                  label="Total Revenue" 
+                  value={`₱${Number(stats?.totalRevenue || 0).toFixed(2)}`} 
+                />
+                <StatCard 
+                  icon={<Package className="text-[#1A1F2E]" />} 
+                  label="Total Orders" 
+                  value={stats?.totalOrders || 0} 
+                />
+                <StatCard 
+                  icon={<Plus className="text-[#1A1F2E]" />} 
+                  label="Orders Today" 
+                  value={stats?.todayOrders || 0} 
+                />
+              </>
+            )}
           </div>
 
-          {lowStockItems.length > 0 && (
+          {!sectionLoading.overview && lowStockItems.length > 0 && (
             <section className="space-y-6">
               <div className="flex items-center gap-2 mb-2">
                 <AlertTriangle className="text-brand-danger" size={20} />
@@ -542,117 +605,13 @@ const AdminDashboard: React.FC = () => {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-            {/* Sales Chart */}
-            <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 transition-all">
-              <h2 className="text-2xl font-serif font-bold text-[#1A1F2E] mb-10 flex items-center gap-3">
-                <BarChart3 size={24} className="text-[#1A1F2E]" />
-                Product Demand
-              </h2>
-              <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={stats?.topProducts || []}>
-                    <XAxis dataKey="name" fontSize={12} axisLine={false} tickLine={false} tick={{ fill: '#64748B' }} />
-                    <YAxis hide />
-                    <Tooltip 
-                      cursor={{ fill: '#f1f5f9', opacity: 0.4 }}
-                      contentStyle={{ 
-                        borderRadius: '12px', 
-                        border: '1px solid #e2e8f0', 
-                        boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', 
-                        padding: '12px',
-                        backgroundColor: 'white',
-                        color: '#1A1F2E'
-                      }}
-                      itemStyle={{ color: '#1A1F2E' }}
-                      labelStyle={{ color: '#64748B', fontWeight: 'bold', marginBottom: '4px' }}
-                    />
-                    <Bar dataKey="quantity" fill="#1A1F2E" radius={[4, 4, 0, 0]} barSize={40}>
-                      {stats?.topProducts?.map((_entry:any, index:number) => (
-                        <Cell key={`cell-${index}`} fill={index === 0 ? '#1A1F2E' : '#64748B'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </section>
-
-            {/* Inventory Table */}
-            <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 transition-all">
-              <div className="flex justify-between items-center mb-10">
-                <h2 className="text-2xl font-serif font-bold text-[#1A1F2E] flex items-center gap-3">
-                  <Package size={24} className="text-[#1A1F2E]" />
-                  Stock Inventory
-                </h2>
-                <button 
-                  onClick={() => setIsInventoryModalOpen(true)}
-                  className="w-10 h-10 bg-[#1A1F2E] text-white rounded-xl flex items-center justify-center hover:bg-[#1A1F2E]/90 transition-all shadow-sm"
-                >
-                  <Plus size={20} />
-                </button>
-              </div>
-              <div className="space-y-5 max-h-[400px] overflow-y-auto pr-4 no-scrollbar border-t border-slate-100 pt-5">
-                {inventory.map((item, index) => {
-                  const isLow = item.stockLevel <= item.lowStockThreshold;
-                  const isCritical = item.stockLevel === 0;
-                  return (
-                    <div 
-                      key={item.id} 
-                      className={`flex flex-col gap-2 p-4 rounded-xl transition-all border ${
-                        index % 2 === 0 ? 'bg-white' : 'bg-slate-50'
-                      } ${
-                        isCritical
-                          ? 'border-red-200 bg-red-50'
-                          : isLow 
-                            ? 'border-orange-200 bg-orange-50' 
-                            : 'border-transparent hover:bg-slate-100'
-                      }`}
-                    >
-                      <div className="flex justify-between items-center text-sm">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-2 h-2 rounded-full ${isLow ? 'bg-red-500 animate-pulse' : 'bg-[#1A1F2E]'}`}></div>
-                          <span className="font-bold text-[#1A1F2E]">{item.name}</span>
-                          {isLow && (
-                            <span className={`text-[8px] text-white px-2 py-0.5 rounded-md font-black uppercase tracking-tight shadow-sm ${isCritical ? 'bg-red-500 animate-pulse' : 'bg-orange-500'}`}>
-                              {isCritical ? 'Depleted' : 'Low Stock'}
-                            </span>
-                          )}
-                        </div>
-                        <span className={`font-bold ${isLow ? 'text-red-600' : 'text-[#64748B]'}`}>
-                          {item.stockLevel} {item.unit}
-                        </span>
-                      </div>
-                      
-                      {/* Linked Products Feedback */}
-                      {((item as any).products?.length > 0 || (item as any).customizations?.length > 0) && (
-                        <div className="flex flex-wrap gap-1.5 mt-1">
-                          {(item as any).products?.map((p: any, pIdx: number) => (
-                            <span key={`p-${p.productId}-${pIdx}`} className="text-[10px] bg-slate-100 text-[#64748B] px-2 py-0.5 rounded font-medium border border-slate-200">
-                              {p.product.name}
-                            </span>
-                          ))}
-                          {(item as any).customizations?.map((c: any, cIdx: number) => (
-                            <span key={`c-${c.choiceId}-${cIdx}`} className="text-[10px] bg-brand-primary/5 text-brand-primary px-2 py-0.5 rounded font-medium border border-brand-primary/10">
-                              {c.choice.group.name}: {c.choice.name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mt-2">
-                        <motion.div 
-                          initial={{ width: 0 }}
-                          animate={{ width: `${Math.min(100, (item.stockLevel / (item.lowStockThreshold * 5)) * 100)}%` }}
-                          className={`h-full ${isLow ? 'bg-red-500' : 'bg-[#1A1F2E]'}`}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <button className="w-full mt-10 py-4 border-2 border-[#1A1F2E] text-[#1A1F2E] rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-[#1A1F2E] hover:text-white transition-all">
-                Replenish Stock
-              </button>
-            </section>
+            <ProductDemandChart stats={stats} loading={sectionLoading.overview} />
+            <StockInventoryList 
+              inventory={inventory} 
+              loading={sectionLoading.overview} 
+              onOpenModal={() => setIsInventoryModalOpen(true)}
+              onRestock={handleRestock}
+            />
           </div>
         </>
       ) : activeTab === 'users' ? (
@@ -675,7 +634,23 @@ const AdminDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {users.map((u, index) => (
+                  {sectionLoading.users && users.length === 0 ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={i}>
+                        <td className="px-8 py-6">
+                          <div className="flex items-center gap-4">
+                            <SkeletonLoader className="w-10 h-10 rounded-full" />
+                            <div className="space-y-2">
+                              <SkeletonLoader className="w-32 h-4" />
+                              <SkeletonLoader className="w-24 h-3" />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-8 py-6"><SkeletonLoader className="w-20 h-6 rounded-full" /></td>
+                        <td className="px-8 py-6 flex justify-end gap-2 items-center h-20"><SkeletonLoader className="w-24 h-8 rounded-lg" /></td>
+                      </tr>
+                    ))
+                  ) : users.map((u, index) => (
                     <tr key={u.id} className={`${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-slate-50 transition-colors`}>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-4">
@@ -771,7 +746,16 @@ const AdminDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredInventory.map((item, index) => {
+                  {sectionLoading.inventory && inventory.length === 0 ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                       <tr key={i}>
+                         <td className="px-6 py-6 font-bold text-[#1A1F2E]"><SkeletonLoader className="w-48 h-5" /><SkeletonLoader className="w-32 h-3 mt-2" /></td>
+                         <td className="px-6 py-6 text-center font-bold text-[#1A1F2E]"><SkeletonLoader className="w-16 h-5 mx-auto" /></td>
+                         <td className="px-6 py-6"><SkeletonLoader className="w-full h-2 rounded-full" /></td>
+                         <td className="px-6 py-6 text-right"><SkeletonLoader className="w-24 h-8 rounded-lg ml-auto" /></td>
+                       </tr>
+                    ))
+                  ) : filteredInventory.map((item, index) => {
                     const isLow = item.stockLevel <= item.lowStockThreshold;
                     const stockPercent = Math.min(100, (item.stockLevel / (item.lowStockThreshold * 3)) * 100);
                     return (
@@ -956,7 +940,20 @@ const AdminDashboard: React.FC = () => {
  
           <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-8">
             <AnimatePresence mode="popLayout">
-              {filteredProducts.map((product) => (
+              {sectionLoading.products && products.length === 0 ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm h-80 flex flex-col justify-between">
+                    <div className="flex gap-6">
+                      <SkeletonLoader className="w-24 h-24 rounded-2xl" />
+                      <div className="flex-1 space-y-3">
+                        <SkeletonLoader className="w-3/4 h-6" />
+                        <SkeletonLoader className="w-1/2 h-4" />
+                      </div>
+                    </div>
+                    <SkeletonLoader className="w-full h-12 rounded-xl mt-4" />
+                  </div>
+                ))
+              ) : filteredProducts.map((product) => (
                 <ProductCard 
                   key={product.id} 
                   product={product} 
@@ -1004,7 +1001,14 @@ const AdminDashboard: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             <AnimatePresence mode="popLayout">
-              {categoryList.map((cat) => (
+              {sectionLoading.categories && categoryList.length === 0 ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="bg-white rounded-xl border border-slate-200 p-8 h-48 flex flex-col justify-between">
+                    <SkeletonLoader className="w-3/4 h-8" />
+                    <SkeletonLoader className="w-1/2 h-4" />
+                  </div>
+                ))
+              ) : categoryList.map((cat) => (
                 <CategoryCard 
                   key={cat.id} 
                   category={cat} 
@@ -1036,7 +1040,17 @@ const AdminDashboard: React.FC = () => {
           </div>
  
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-sans">
-            {customizations.map((group) => (
+            {sectionLoading.variations && customizations.length === 0 ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="bg-white border border-slate-200 rounded-xl p-6 h-64 flex flex-col justify-between">
+                  <div>
+                    <SkeletonLoader className="w-1/2 h-8 mb-4 " />
+                    <SkeletonLoader className="w-1/3 h-4" />
+                  </div>
+                  <SkeletonLoader className="w-full h-24 rounded-xl" />
+                </div>
+              ))
+            ) : customizations.map((group) => (
               <motion.div 
                 key={group.id}
                 layout

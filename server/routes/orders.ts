@@ -18,29 +18,73 @@ ordersRouter.get('/me', async (req, res) => {
   }
 
   const userId = (req as any).user.id;
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const skip = (page - 1) * limit;
+
+  const status = req.query.status as string;
+  const startDate = req.query.startDate as string;
+  const endDate = req.query.endDate as string;
+  const search = req.query.search as string;
 
   try {
-    const orders = await prisma.order.findMany({
-      where: { userId },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true
+    const where: any = { userId };
+    
+    if (status && status !== 'ALL') {
+      where.status = status;
+    }
+    
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
+    }
+
+    if (search) {
+      where.OR = [
+        { id: { contains: search } }
+      ];
+    }
+
+    const [orders, total] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
+          },
+          items: {
+            include: {
+              product: true
+            }
           }
         },
-        items: {
-          include: {
-            product: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
+        orderBy: {
+          createdAt: 'desc'
+        },
+        skip,
+        take: limit
+      }),
+      prisma.order.count({ where })
+    ]);
+
+    res.json({
+      orders,
+      pagination: {
+        total,
+        pages: Math.ceil(total / limit),
+        currentPage: page,
+        limit
       }
     });
-    res.json(orders);
   } catch (error) {
     console.error('Error fetching user orders:', error);
     res.status(500).json({ error: 'Failed to fetch your orders' });
@@ -58,27 +102,45 @@ ordersRouter.get('/', async (req, res) => {
       return res.status(403).json({ error: 'Forbidden' });
   }
 
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 20;
+  const skip = (page - 1) * limit;
+
   try {
-    const orders = await prisma.order.findMany({
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true
+    const [orders, total] = await Promise.all([
+      prisma.order.findMany({
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
+          },
+          items: {
+            include: {
+              product: true
+            }
           }
         },
-        items: {
-          include: {
-            product: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
+        orderBy: {
+          createdAt: 'desc'
+        },
+        skip,
+        take: limit
+      }),
+      prisma.order.count()
+    ]);
+
+    res.json({
+      orders,
+      pagination: {
+        total,
+        pages: Math.ceil(total / limit),
+        currentPage: page,
+        limit
       }
     });
-    res.json(orders);
   } catch (error) {
     console.error('Error fetching global orders:', error);
     res.status(500).json({ error: 'Failed to fetch global orders' });

@@ -117,13 +117,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         </Link>
         {!isCollapsed && (
           <div className="flex items-center gap-2">
-            <button 
-              onClick={toggleTheme}
-              className="p-2.5 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 hover:text-brand-primary dark:hover:text-slate-100 rounded-xl transition-all duration-300"
-              title="Toggle theme"
-            >
-              {theme === 'light' ? <Moon size={20} className="transition-all duration-300" /> : <Sun size={20} className="transition-all duration-300" />}
-            </button>
             <button onClick={onClose} className="md:hidden p-2.5 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:text-brand-primary dark:hover:text-slate-100 rounded-xl">
               <X size={20} />
             </button>
@@ -133,6 +126,29 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Nav Links */}
       <div className="flex-1 overflow-y-auto flex flex-col no-scrollbar px-4 pb-6 pt-6 w-full">
+        {/* Theme Toggle */}
+        <div className={`mb-6 flex ${isCollapsed ? 'justify-center' : 'justify-start'}`}>
+          <motion.button 
+            onClick={toggleTheme}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ rotate: 180 }}
+            className="w-10 h-10 rounded-lg flex items-center justify-center border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 transition-all text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm"
+            title="Toggle theme"
+          >
+            <AnimatePresence mode="wait">
+                <motion.div
+                  key={theme}
+                  initial={{ rotate: -90, opacity: 0 }}
+                  animate={{ rotate: 0, opacity: 1 }}
+                  exit={{ rotate: 90, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+                </motion.div>
+            </AnimatePresence>
+          </motion.button>
+        </div>
+
         <div className="space-y-8 flex-1">
           
           <div>

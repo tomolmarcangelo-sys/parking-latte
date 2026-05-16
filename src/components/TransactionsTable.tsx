@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { apiClient } from '../lib/api';
 import { Order, OrderStatus } from '../types';
-import { Search, Calendar, ArrowUpDown, RefreshCw, ChevronRight, ChevronDown, Eye, Download } from 'lucide-react';
+import { Search, Calendar, ArrowUpDown, RefreshCw, ChevronRight, ChevronDown, Eye, Download, MoreHorizontal } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { AnimatePresence, motion } from 'motion/react';
+import SkeletonLoader from './SkeletonLoader';
 
 export const TransactionsTable: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pagination, setPagination] = useState({ total: 0, pages: 1, currentPage: 1, limit: 20 });
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   
   // Filters
@@ -20,18 +22,32 @@ export const TransactionsTable: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
-    fetchOrders();
+    fetchOrders(1);
   }, []);
 
-  const fetchOrders = async () => {
-    setLoading(true);
+  const fetchOrders = async (page: number = 1, append: boolean = false) => {
+    if (!append) setLoading(true);
     try {
-      const data = await apiClient.get('/orders');
-      setOrders(data);
+      const resp = await apiClient.get(`/orders?page=${page}&limit=${pagination.limit}`);
+      const newOrders = resp.orders || [];
+      if (append) {
+        setOrders(prev => [...prev, ...newOrders]);
+      } else {
+        setOrders(newOrders);
+      }
+      if (resp.pagination) {
+        setPagination(resp.pagination);
+      }
     } catch (error) {
       toast.error('Failed to fetch transaction history');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLoadMore = () => {
+    if (pagination.currentPage < pagination.pages) {
+      fetchOrders(pagination.currentPage + 1, true);
     }
   };
 
@@ -187,15 +203,17 @@ export const TransactionsTable: React.FC = () => {
                </tr>
              </thead>
              <tbody className="divide-y divide-slate-100">
-               {loading ? (
-                 <tr>
-                   <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                     <div className="flex flex-col items-center gap-3">
-                       <RefreshCw className="animate-spin text-brand-secondary" size={24} />
-                       <span className="font-bold tracking-tight">Fetching Master Records...</span>
-                     </div>
-                   </td>
-                 </tr>
+               {loading && orders.length === 0 ? (
+                 Array.from({ length: 5 }).map((_, i) => (
+                   <tr key={`skeleton-${i}`}>
+                     <td className="px-6 py-4"><SkeletonLoader className="h-4 w-24" /></td>
+                     <td className="px-6 py-4"><SkeletonLoader className="h-4 w-32" /><SkeletonLoader className="h-3 w-40 mt-1" /></td>
+                     <td className="px-6 py-4"><SkeletonLoader className="h-4 w-32" /></td>
+                     <td className="px-6 py-4"><SkeletonLoader className="h-5 w-20 rounded-md" /></td>
+                     <td className="px-6 py-4"><SkeletonLoader className="h-4 w-16" /></td>
+                     <td className="px-6 py-4"><SkeletonLoader className="h-4 w-32" /></td>
+                   </tr>
+                 ))
                ) : filteredAndSortedOrders.length === 0 ? (
                  <tr>
                    <td colSpan={6} className="px-6 py-16 text-center text-slate-500">
@@ -305,8 +323,19 @@ export const TransactionsTable: React.FC = () => {
              </tbody>
            </table>
          </div>
-         <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center text-sm font-bold text-slate-500">
-            <span>Showing {filteredAndSortedOrders.length} transactions</span>
+         <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4 text-sm font-bold text-slate-500">
+            <span>Showing {orders.length} of {pagination.total} transactions</span>
+            
+            {pagination.currentPage < pagination.pages && (
+              <button 
+               onClick={handleLoadMore}
+               disabled={loading}
+               className="flex items-center gap-2 px-6 py-2 bg-white border border-slate-200 rounded-xl hover:border-brand-primary text-brand-primary transition-all shadow-sm disabled:opacity-50"
+              >
+                {loading ? <RefreshCw className="animate-spin" size={16} /> : <MoreHorizontal size={16} />}
+                Load More Master Records
+              </button>
+            )}
          </div>
       </div>
     </div>

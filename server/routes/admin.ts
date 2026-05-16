@@ -7,6 +7,7 @@ export const adminRouter = express.Router();
 adminRouter.use(authenticateAdmin);
 
 adminRouter.get('/stats', async (req, res) => {
+  res.set('Cache-Control', 'public, max-age=10');
   const prisma = await getPrismaClient();
   if (!prisma) return res.status(503).json({ error: 'Database not configured' });
   try {
@@ -49,6 +50,7 @@ adminRouter.get('/stats', async (req, res) => {
 });
 
 adminRouter.get('/customizations', async (req, res) => {
+  res.set('Cache-Control', 'public, max-age=60');
   const prisma = await getPrismaClient();
   if (!prisma) return res.status(503).json({ error: 'Database not configured' });
   try {

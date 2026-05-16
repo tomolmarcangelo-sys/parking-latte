@@ -77,7 +77,7 @@ usersRouter.get('/', async (req, res) => {
           email: true,
           name: true,
           role: true,
-          emailVerified: true,
+          isVerified: true,
           createdAt: true
       }
     });
@@ -117,14 +117,14 @@ usersRouter.put('/:id', async (req, res) => {
   }
   try {
     const { id } = req.params;
-    const { name, email, role, emailVerified } = req.body;
+    const { name, email, role, isVerified } = req.body;
 
     // Optional: Prevent changing own role if it's currently ADMIN? 
     // For now, let's just implement the basic update.
 
     const user = await prisma.user.update({
       where: { id },
-      data: { name, email, role, emailVerified }
+      data: { name, email, role, isVerified }
     });
     const { password: _, ...userWithoutPassword } = user;
     res.json(userWithoutPassword);

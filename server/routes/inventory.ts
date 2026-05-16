@@ -5,6 +5,7 @@ import { authenticateAdmin } from '../middleware/auth.js';
 export const inventoryRouter = express.Router();
 
 inventoryRouter.get('/', async (req, res) => {
+  res.set('Cache-Control', 'public, max-age=30');
   const prisma = await getPrismaClient();
   if (!prisma) return res.status(503).json({ error: 'Database not configured' });
   try {

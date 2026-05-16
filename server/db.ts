@@ -9,7 +9,14 @@ export const getPrisma = async () => {
       return null;
     }
     try {
-      const client = new PrismaClient();
+      const client = new PrismaClient({
+        log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+        datasources: {
+          db: {
+            url: process.env.DATABASE_URL + (process.env.DATABASE_URL.includes('?') ? '&' : '?') + 'connection_limit=10&pool_timeout=30',
+          },
+        },
+      });
       await client.$queryRaw`SELECT 1`;
       prismaClient = client;
     } catch (e) {

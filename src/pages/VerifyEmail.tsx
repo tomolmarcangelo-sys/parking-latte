@@ -43,10 +43,10 @@ const VerifyEmail: React.FC = () => {
       try {
         const response = await apiClient.get(`/auth/verify-email?token=${token}&email=${email}`);
         setStatus('success');
-        setMessage(response.message || 'Email verified successfully!');
+        setMessage(response.data.message || 'Email verified successfully!');
       } catch (error: any) {
         setStatus('error');
-        setMessage(error.response?.data?.message || 'Verification failed. The link may be invalid or expired.');
+        setMessage(error.response?.data?.error || 'Verification failed. The link may be invalid or expired.');
       }
     };
 
@@ -91,8 +91,18 @@ const VerifyEmail: React.FC = () => {
         {status === 'error' && (
           <div className="space-y-6">
             <XCircle size={48} className="mx-auto text-brand-danger" />
-            <h1 className="text-2xl font-serif font-bold text-brand-primary">Verification Failed</h1>
-            <p className="text-text-muted">{message}</p>
+            
+            {message === 'Token expired' ? (
+              <h1 className="text-3xl font-serif font-bold text-brand-primary">Link Expired</h1>
+            ) : (
+              <h1 className="text-2xl font-serif font-bold text-brand-primary">Verification Failed</h1>
+            )}
+
+            <p className="text-text-muted">
+              {message === 'Token expired' 
+                ? 'This link has expired. Click below to receive a fresh verification link.'
+                : message}
+            </p>
             
             <div className="bg-bg-sidebar/30 p-6 rounded-[2rem] border border-border-subtle/50">
               <p className="text-xs font-bold text-text-muted mb-4">Request a new verification link:</p>
@@ -114,7 +124,7 @@ const VerifyEmail: React.FC = () => {
                 </button>
               </form>
               {resendStatus === 'success' && (
-                <p className="text-[10px] text-brand-primary mt-3 font-bold">New link sent! Check your inbox.</p>
+                <p className="text-[10px] text-brand-primary mt-3 font-bold">A new brew is on its way to your inbox! ☕</p>
               )}
               {resendStatus === 'error' && (
                 <p className="text-[10px] text-brand-danger mt-3 font-bold">Failed to send. Please try again.</p>

@@ -73,7 +73,8 @@ const getBaseTemplate = (title: string, content: string, cta?: { label: string, 
 };
 
 export const sendVerificationEmail = async (email: string, token: string) => {
-  const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}&email=${email}`;
+  const baseUrl = process.env.FRONTEND_URL?.replace(/\/+$/, '');
+  const verificationUrl = `${baseUrl}/verify-email?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
   const html = getBaseTemplate(
     'Verify Your Identity',
     '<p>Welcome to the family. To complete your registration and start your Parking Latte experience, please confirm your email address.</p>',

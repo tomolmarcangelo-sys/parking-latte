@@ -6,7 +6,7 @@ export interface User {
   email: string;
   name?: string;
   role: Role;
-  emailVerified?: boolean;
+  isVerified?: boolean;
 }
 
 export interface Category {
@@ -75,6 +75,7 @@ export interface Order {
   items: OrderItem[];
   user: { name: string; email: string };
   createdAt: string;
+  updatedAt: string;
   staffNotes?: string;
   lastUpdatedBy?: string;
 }

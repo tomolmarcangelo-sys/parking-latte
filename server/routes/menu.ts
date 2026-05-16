@@ -5,6 +5,7 @@ import { authenticateAdmin } from '../middleware/auth.js';
 export const menuRouter = express.Router();
 
 menuRouter.get('/', async (req, res) => {
+  res.set('Cache-Control', 'public, max-age=60');
   const prisma = await getPrismaClient();
   if (!prisma) {
     return res.status(503).json({ error: 'Database not configured' });
@@ -48,6 +49,7 @@ menuRouter.get('/', async (req, res) => {
 });
 
 menuRouter.get('/categories', async (req, res) => {
+  res.set('Cache-Control', 'public, max-age=60');
   const prisma = await getPrismaClient();
   if (!prisma) {
     return res.status(503).json({ error: 'Database not configured' });

@@ -33,31 +33,18 @@ authRouter.post('/google', async (req, res) => {
     const payload = ticket.getPayload();
     if (!payload || !payload.email) return res.status(400).json({ error: 'Invalid token' });
 
-    // Validate audience manually if verifyIdToken didn't throw (though it should)
-    const backendAudience = process.env.GOOGLE_CLIENT_ID;
-    console.log('Backend Audience:', backendAudience, 'Token Audience:', payload.aud);
-    if (payload.aud !== backendAudience) {
-        console.error('Audience mismatch:', { expected: backendAudience, actual: payload.aud });
-        return res.status(400).json({ error: 'Google sign-in failed: Audience mismatch' });
-    }
-
-    let user = await prisma.user.findUnique({ where: { email: payload.email } });
-    
-    if (!user) {
-        user = await prisma.user.create({
-            data: {
-                email: payload.email,
-                name: payload.name || 'Google User',
-                role: 'CUSTOMER',
-                emailVerified: true
-            }
-        });
-    } else if (!user.emailVerified) {
-        user = await prisma.user.update({
-            where: { id: user.id },
-            data: { emailVerified: true }
-        });
-    }
+    const user = await prisma.user.upsert({
+      where: { email: payload.email },
+      update: {
+        isVerified: true
+      },
+      create: {
+        email: payload.email,
+        name: payload.name || 'Google User',
+        role: 'CUSTOMER',
+        isVerified: true
+      }
+    });
 
     const jwtToken = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET as string, { expiresIn: '7d' });
     res.json({ token: jwtToken, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
@@ -107,7 +94,7 @@ authRouter.post('/login', async (req, res) => {
       });
     }
 
-    if (!user.emailVerified) {
+    if (!user.isVerified) {
       return res.status(403).json({ 
         error: 'Please verify your email address before logging in.',
         notVerified: true 
@@ -125,9 +112,16 @@ authRouter.post('/login', async (req, res) => {
   }
 });
 
+const resendRateLimit = new Map<string, number>();
+
 authRouter.post('/resend-verification', async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  const lastAttempt = resendRateLimit.get(email);
+  if (lastAttempt && Date.now() - lastAttempt < 60000) {
+    return res.status(429).json({ error: 'Please wait 60 seconds before sending another email.' });
+  }
 
   const prisma = await getPrismaClient();
   if (!prisma) return res.status(503).json({ error: 'DB not configured' });
@@ -135,7 +129,9 @@ authRouter.post('/resend-verification', async (req, res) => {
   try {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return res.status(404).json({ error: 'User not found' });
-    if (user.emailVerified) return res.status(400).json({ error: 'Email already verified' });
+    if (user.isVerified) return res.status(400).json({ error: 'Email already verified' });
+
+    resendRateLimit.set(email, Date.now());
 
     const token = crypto.randomBytes(32).toString('hex');
     const hashedToken = await bcrypt.hash(token, 10);
@@ -143,8 +139,8 @@ authRouter.post('/resend-verification', async (req, res) => {
     await prisma.user.update({
       where: { id: user.id },
       data: {
-        verificationTokenHash: hashedToken,
-        verificationTokenExpires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        verificationCode: hashedToken,
+        verificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
       }
     });
 
@@ -179,8 +175,8 @@ authRouter.post('/register', async (req, res) => {
         email,
         password: hashedPassword,
         name,
-        verificationTokenHash: hashedToken,
-        verificationTokenExpires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        verificationCode: hashedToken,
+        verificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
       }
     });
 
@@ -213,33 +209,42 @@ authRouter.put('/profile', authenticateUser, async (req: any, res) => {
 
 authRouter.get('/verify-email', async (req, res) => {
   const { token, email } = req.query;
-  if (!token || !email) return res.status(400).json({ error: 'Missing token/email' });
+  if (!token || !email || typeof token !== 'string' || typeof email !== 'string') {
+    return res.redirect(`${process.env.FRONTEND_URL}/verify-error?reason=invalid`);
+  }
 
   const prisma = await getPrismaClient();
   if (!prisma) return res.status(503).json({ error: 'DB not configured' });
 
   try {
-    const user = await prisma.user.findUnique({ where: { email: email as string } });
-    if (!user || !user.verificationTokenHash || !user.verificationTokenExpires) {
-        return res.status(400).json({ error: 'Invalid verification link' });
-    }
+    const emailLower = email.toLowerCase();
     
-    if (user.verificationTokenExpires < new Date()) {
-        return res.status(400).json({ error: 'Token expired' });
-    }
+    // Perform lookup and update within a transaction to avoid race conditions
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({ where: { email: emailLower } });
+      
+      if (!user || !user.verificationCode || !user.verificationExpires) {
+        throw new Error('invalid');
+      }
+      
+      // Use UTC comparison logic
+      if (new Date(user.verificationExpires).getTime() < Date.now()) {
+        throw new Error('expired');
+      }
 
-    const isValidToken = await bcrypt.compare(token as string, user.verificationTokenHash);
-    if (!isValidToken) return res.status(400).json({ error: 'Invalid verification token' });
+      const isValidToken = await bcrypt.compare(token, user.verificationCode);
+      if (!isValidToken) throw new Error('invalid');
 
-    await prisma.user.update({
-        where: { id: user.id },
-        data: { emailVerified: true, verificationTokenHash: null, verificationTokenExpires: null }
+      return await tx.user.update({
+          where: { id: user.id },
+          data: { isVerified: true, verificationCode: null, verificationExpires: null }
+      });
     });
 
-    const jwtToken = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET as string, { expiresIn: '7d' });
-    res.json({ token: jwtToken, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
-  } catch (error) {
+    res.redirect(`${process.env.FRONTEND_URL}/login?status=success`);
+  } catch (error: any) {
     console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    const reason = error.message === 'expired' ? 'expired' : 'invalid';
+    res.redirect(`${process.env.FRONTEND_URL}/verify-error?reason=${reason}`);
   }
 });

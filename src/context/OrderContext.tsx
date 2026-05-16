@@ -11,7 +11,13 @@ interface OrderContextType {
   loading: boolean;
   refreshing: boolean;
   socketConnected: boolean;
-  fetchOrders: () => Promise<void>;
+  pagination: {
+    total: number;
+    pages: number;
+    currentPage: number;
+    limit: number;
+  } | null;
+  fetchOrders: (options?: { page?: number; limit?: number; status?: string; startDate?: string; endDate?: string; search?: string }) => Promise<void>;
   updateStatus: (orderId: string, status: OrderStatus, staffNotes?: string) => Promise<void>;
   deleteOrder: (orderId: string) => Promise<void>;
 }
@@ -23,6 +29,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
+  const [pagination, setPagination] = useState<OrderContextType['pagination']>(null);
   const { token, user } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
   
@@ -33,15 +40,43 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     ordersRef.current = orders;
   }, [orders]);
 
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = useCallback(async (options: { page?: number; limit?: number; status?: string; startDate?: string; endDate?: string; search?: string } = {}) => {
     if (!token) return;
     setRefreshing(true);
     try {
-      const endpoint = (user?.role === 'ADMIN' || user?.role === 'STAFF') ? '/orders' : '/orders/me';
+      const { page = 1, limit = 10, status, startDate, endDate, search } = options;
+      
+      const params = new URLSearchParams();
+      params.append('page', page.toString());
+      params.append('limit', limit.toString());
+      if (status && status !== 'ALL') params.append('status', status);
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+      if (search) params.append('search', search);
+
+      const isStaff = user?.role === 'ADMIN' || user?.role === 'STAFF';
+      const baseUrl = isStaff ? '/orders' : '/orders/me';
+      const endpoint = `${baseUrl}?${params.toString()}`;
+      
       const data = await apiClient.get(endpoint);
-      setOrders(data);
+      
+      if (data && typeof data === 'object' && 'orders' in data && Array.isArray(data.orders)) {
+        // If it's page 1, replace. If it's page > 1, append (for infinite scroll support if needed)
+        // But for standard pagination, we might just replace. 
+        // Let's replace for now, and handle infinite scroll logic in the component if needed.
+        setOrders(data.orders);
+        setPagination(data.pagination);
+      } else if (Array.isArray(data)) {
+        setOrders(data);
+        setPagination(null);
+      } else {
+        setOrders([]);
+        setPagination(null);
+      }
     } catch (error) {
       console.error('Failed to fetch orders:', error);
+      setOrders([]);
+      setPagination(null);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -226,10 +261,11 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     loading, 
     refreshing, 
     socketConnected,
+    pagination,
     fetchOrders, 
     updateStatus, 
     deleteOrder 
-  }), [orders, staffQueueCount, loading, refreshing, socketConnected, fetchOrders, updateStatus, deleteOrder]);
+  }), [orders, staffQueueCount, loading, refreshing, socketConnected, pagination, fetchOrders, updateStatus, deleteOrder]);
 
   return (
     <OrderContext.Provider value={value}>
